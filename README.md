@@ -16,7 +16,7 @@
 4. 下载自己的环境配置脚本
 自己的 GitHub 地址：
     ```
-    wget https://raw.githubusercontent.com/cdtcontact/linux-env/main/install.sh
+    wget https://raw.githubusercontent.com/cdtcontact/linux-env/main/init_env.sh
     ```
 
 5. 执行环境配置脚本
