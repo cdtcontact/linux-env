@@ -108,3 +108,9 @@ RPROMPT="[%{$fg[yellow]%}%?%{$reset_color%}]"
 [ -r "/etc/zshrc_$TERM_PROGRAM" ] && . "/etc/zshrc_$TERM_PROGRAM"
 source /usr/share/autojump/autojump.sh
 source ~/.oh-my-zsh/plugins/incr/incr*.zsh
+
+
+# Common ls aliases
+alias ll='ls -alF'
+alias la='ls -A'
+alias l='ls -CF'
