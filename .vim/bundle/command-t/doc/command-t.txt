@@ -1,0 +1,1146 @@
+*command-t.txt* Command-T plug-in for Vim         *command-t*
+
+CONTENTS                                        *command-t-contents*
+
+ 1. Introduction                    |command-t-intro|
+ 2. Requirements                    |command-t-requirements|
+ 3. Installation                    |command-t-installation|
+ 4. Upgrading                       |command-t-upgrading|
+ 5. Trouble-shooting                |command-t-trouble-shooting|
+ 6. Known issues                    |command-t-known-issues|
+ 7. Usage                           |command-t-usage|
+ 8. Commands                        |command-t-commands|
+ 9. Functions                       |command-t-functions|
+10. Mappings                        |command-t-mappings|
+11. Options                         |command-t-options|
+12. FAQ                             |command-t-faq|
+13. Tips                            |command-t-tips|
+14. Authors                         |command-t-authors|
+15. Development                     |command-t-development|
+16. Website                         |command-t-website|
+17. Related projects                |command-t-related-projects|
+18. License                         |command-t-license|
+19. History                         |command-t-history|
+
+
+INTRODUCTION                                    *command-t-intro*
+
+The Command-T plug-in provides an extremely fast, intuitive mechanism for
+opening files and buffers with a minimal number of keystrokes. It's named
+"Command-T" because it is inspired by the "Go to File" window bound to
+Command-T in TextMate.
+
+Files are selected by typing characters that appear in their paths, and are
+ordered by an algorithm which knows that characters that appear in certain
+locations (for example, immediately after a path separator) should be given
+more weight.
+
+To search efficiently, especially in large projects, you should adopt a
+"path-centric" rather than a "filename-centric" mentality. That is you should
+think more about where the desired file is found rather than what it is
+called. This means narrowing your search down by including some characters
+from the upper path components rather than just entering characters from the
+filename itself.
+
+
+REQUIREMENTS                                    *command-t-requirements*
+
+The core of Command-T is written in C for speed, and it optionally makes use
+of a number of external programs -- such as `git`, `rg`, and `watchman` --
+for finding files.
+
+Run `:checkhealth wincent.commandt` to confirm that the C library has been
+built, and check for the presence of the optional executable helpers.
+
+See also |command-t-ruby-requirements| for older requirements.
+
+
+INSTALLATION                                    *command-t-installation*
+
+Most people choose to install using a plug-in manager (although you may
+also choose to simply download the source code or pull it into your dotfiles
+as a Git submodule). As an example, if you were using packer.nvim
+(https://github.com/wbthomason/packer.nvim), the following config could be
+used:
+
+    use {
+      'wincent/command-t',
+      run = 'cd lua/wincent/commandt/lib && make',
+      setup = function ()
+        vim.g.CommandTPreferredImplementation = 'lua'
+      end,
+      config = function()
+        require('wincent.commandt').setup({
+          -- Customizations go here.
+        })
+      end,
+    }
+
+Note the use of `make`; you'll need a C compiler to actually build the
+plug-in. If you're managing the plug-in manually, `cd` into the
+`lua/wincent/commandt/lib/` directory and type:
+>
+    make
+<
+If you're not sure where to run this command, running
+`:checkhealth wincent.commandt` should show the exact location.
+
+See also |command-t-ruby-installation| for older installation instructions
+(relevant if you wish to continue using the Ruby implementation as a
+fallback, as described in |command-t-upgrading| below).
+
+
+UPGRADING                                       *command-t-upgrading*
+
+This section details what has changed from version 5.x to 6.x, why, and how to
+update. For additional context see the blog post:
+
+  https://wincent.com/blog/command-t-lua-rewrite
+
+Up to and including version 5.0, Command-T was written in a combination of
+Ruby, Vimscript, and C, and was compatible with a range of versions of both
+Vim and Neovim. Back when the project started (2010), Vim was at version 7 and
+Neovim did not exist yet. At that time, Ruby provided a convenient means of
+packaging high-performance C code inside a library that could be called from
+Vim, making Command-T the fastest fuzzy-finder by far. The downside was that
+it was hard to install because it required that care be taken to compile both
+Vim and Command-T with the exact same version of Ruby. Additionally, Vim did
+not yet provide handy abstractions for things like floating windows, which
+meant that a large fraction of the Command-T codebase was actually dedicated
+to micromanaging windows, buffers and splits, so that it could create the
+illusion of rendering a separate match listing interface without interfering
+with existing buffers, splits, and settings. Most of this code was written in
+Ruby (a "real" programming language), which was a bit more pleasant to work
+with than Vimscript (infamous for its quirks), but the design was still fairly
+unorthodox; for example, the decision to capture query inputs by setting up
+mappings for individual keys (given that there was no actual input buffer)
+meant that some things that you might reasonably expect to work, like being
+able to copy and paste a query, did not always work.
+
+Since then, a number of things have occurred: competitive pressure from Neovim
+has lead to a proliferation of features in both editors, including floating
+windows which make building plug-in UIs like the one needed by Command-T
+much easier than before. While Vim has doubled down on its bespoke scripting
+language in the form of "Vim9 script", Neovim has leveraged Lua, which is
+broadly used across a range of technology ecosystems and offers excellent
+performance. Many core editor APIs are now easily accessible from Lua, and for
+those that aren't, running pieces of Vimscript from Lua is possible, albeit
+ugly. Interestingly, from the perspective of Command-T, interfacing with a
+C library from Lua is relatively straightforward due to the excellent FFI
+support.
+
+From version 6.0, as the result of a complete rewrite, the core of Command-T
+is now written in Lua and C, and it only supports Neovim. The C library is now
+pure POSIX-compliant C, free from any references to the Ruby virtual machine.
+This, combined with the low overhead of calling into C from Lua via the FFI
+means that the performance critical parts of the code are even faster than
+before, up to twice as fast according to the benchmarks. In addition, by
+targeting newer APIs and writing the UI code in Lua, that portion of the core
+is also significantly more responsive and robust. Various UI quirks have been
+eliminated in this way, including the aforementioned inability to paste
+queries (Command-T uses a real buffer for input now, which means that all
+standard Vim editing commands can be used inside the prompt area).
+
+There is a cost, however. Most notably, the rewrite is not yet a
+feature-complete copy of the original Ruby-powered version, and filling in
+the gaps is dependent on seeing adequate demand from users. Additionally,
+as a ground-up rewrite, there is the possibility that new bugs have been
+introduced. The other obvious cost is that this is a breaking change, in a
+sense. No attempt has been made at providing Windows support for instance, nor
+for Vim. In my judgment, Neovim has won the war, and I have no interest in
+investing in projects that require me to master a custom programming language
+usuable in only one environment.
+
+In recognition of the fact that many plug-in users in the Vim/Neovim ecosystem
+use plug-in managers to track the `HEAD` of the default branch of a Git
+repository, we can use SemVer (https://semver.org/) but not expect it to serve
+much communicative purpose nor shield users from inconvenience. As such, the
+initial plan is to keep the Ruby code exactly where it is inside the plug-in
+and print a deprecation warning prompting people to either opt-in to continue
+using the old implementation, or otherwise opt-in to the new one.
+
+
+How to opt-in to remaining on the Ruby implementation ~
+
+Set:
+>
+    let g:CommandTPreferredImplementation='ruby'
+<
+early on in your |vimrc|, before the Lua code in the plug-in has had a chance
+to execute. This will cause the Ruby code to set up its commands, options,
+and mappings as it always has done. That is, a command like |:CommandT| will
+open the Ruby-powered file finder, and a mapping like `<Leader>t` will trigger
+that command. Likewise, options such as |g:CommandTMaxFiles| will continue to
+operate as before. The behavior of these commands, options, and mappings is
+described in |command-t-ruby.txt| (the bulk of the documentation in this file,
+|command-t.txt|, refers to the Lua-powered facilities).
+
+The Lua implementation is still available for testing even when
+|g:CommandTPreferredImplementation| is set to `"ruby"`. For example, to use
+the Lua-powered version of |:CommandT| when Ruby is selected, invoke the
+command with the `:KommandT` alias instead.
+
+
+How to opt-in to switching to the Lua implementation ~
+
+Call:
+>
+    require('wincent.commandt').setup()
+<
+early on in your |vimrc|,  before the Ruby plug-in code has had a chance to
+execute. Alternatively, if you wish to defer calling |commandt.setup()| until
+later on in the |startup| process, you can instead define early on:
+>
+    let g:CommandTPreferredImplementation='lua'
+<
+In order to make a clean break, and avoid confusion about the capabilities
+and behavior of the different implementations, the Lua version does not make
+any use of the |g:| options variables from the Ruby implementation. That is,
+instead of setting a variable like |g:CommandTMaxHeight| to control the height
+of the match listing, you would instead pass a `height` value in your
+|commandt.setup()| call:
+>
+    require('wincent.commandt').setup({
+      height = 30,
+    })
+<
+Upon opting in to use the Lua implementation, it will set up commands such as
+|:CommandT|, |:CommandTBuffer|, and |:CommandTHelp|. As noted previously, not
+all commands in the Ruby implementation have equivalents in the Lua
+implementation yet.
+
+The Ruby implementation, which continues to exist, will take the call to
+|commandt.setup()| as a cue to define alternate versions of its commands under
+different aliases, that can be used as a fallback in the event that something
+is faulty or insufficient with the Lua versions. For example, the Ruby
+versions of the above will be available as `:KommandT`, `:KommandTBuffer`, and
+`:KommandTHelp`, respectively. At some point in the future, once the new
+version is considered sufficiently stable and complete, these fallbacks
+won't be defined any more. Expect that change to be made with the release of
+version 7.0.
+
+Unlike the Ruby version, the Lua version does not define any mappings out of
+the box. In order to set up the equivalent mappings for Lua, you would add the
+following to your |vimrc| or some other file that gets loaded during
+|startup|:
+>
+    vim.keymap.set('n', '<Leader>b', '<Plug>(CommandTBuffer)')
+    vim.keymap.set('n', '<Leader>j', '<Plug>(CommandTJump)')
+    vim.keymap.set('n', '<Leader>t', '<Plug>(CommandT)')
+<
+
+What happens if you don't explicitly opt-in to either implementation ~
+
+When you open Neovim, Command-T will show a message prompting you to choose an
+implementation via one of the above means. You can either follow this prompt,
+or ignore it, but it will appear every time that you open Neovim until you
+make a decision.
+
+If you don't opt-in explicitly, Command-T version 6.0 will behave as though
+you had chosen Ruby. Starting with version 7.0, it will behave as though you
+had chosen Lua.
+
+If you are running Vim instead of Neovim, Command-T will behave as though you
+had chosen Ruby.
+
+If you wish to avoid the entire business of upgrading, you can set up your
+plug-in manager to track the Command-T `5-x-release` branch instead of `main`.
+That branch only contains the Ruby code, and none of the Lua changes that
+started with the 6.0 release.
+
+
+TROUBLE-SHOOTING                                *command-t-trouble-shooting*
+
+See also |command-t-ruby-trouble-shooting| for older trouble-shooting tips.
+
+
+KNOWN ISSUES                                    *command-t-known-issues*
+
+- There are many missing features in 6.x compared with 5.x.
+- 5.x used to cache directory listings, requiring the use of |:CommandTFlush|
+  to force a re-scan. 6.x does not implement any such caching (which means
+  that results are always fresh, but on large directories the re-scanning may
+  introduce a noticeable delay).
+- The documentation for 6.x (ie. this document) is still a work in progress.
+
+
+USAGE                                           *command-t-usage*
+
+See also |command-t-ruby-usage| for older usage information.
+
+
+COMMANDS                                        *command-t-commands*
+
+                                                *:CommandT*
+|:CommandT|         Brings up the Command-T file window, starting in the current
+                  working directory as returned by the |:pwd| command. Scans
+                  for files using the `fts` facilities provided by the C
+                  standard library.
+
+                                                 *:CommandTBuffer*
+|:CommandTBuffer|   Brings up the Command-T buffer window.
+                  This works exactly like the standard file window,
+                  except that the selection is limited to files that
+                  you already have open in buffers.
+
+                                                *:CommandTFind*
+|:CommandTFind|     Brings up the Command-T file window, starting in the current
+                  working directory as returned by the |:pwd| command. Scans
+                  for files by executing the `find` executable.
+
+                                                *:CommandTGit*
+|:CommandTGit|      Brings up the Command-T file window, starting in the current
+                  working directory as returned by the |:pwd| command. Scans
+                  for files using `git`, so only works inside Git
+                  repositories.
+
+                                                 *:CommandTHelp*
+|:CommandTHelp|     Brings up the Command-T help search window. This works
+                  exactly like the standard file window, except that it shows
+                  help topics found in any documentation under Vim's
+                  |'runtimepath'|.
+
+                                                *:CommandTRipgrep*
+|:CommandTRipgrep|  Brings up the Command-T file window, starting in the current
+                  working directory as returned by the |:pwd| command. Scans
+                  for files using `rg`.
+
+                                                *:CommandTWatchman*
+|:CommandTWatchman| Brings up the Command-T file window, starting in the current
+                  working directory as returned by the |:pwd| command. Scans
+                  for files by connecting to the `watchman` daemon, which must
+                  be installed on your system.
+
+See also |command-t-ruby-commands| for commands that exist specifically within
+the Ruby-powered version of Command-T.
+
+
+FUNCTIONS                                       *command-t-functions*
+
+All Lua functions defined by Command-T are namespaced under `wincent` in
+order to avoid collisions with other plug-ins and with built-in functionality
+provided by Neovim. That is, to require and use a function like
+|commandt.setup()| you would use a `require` statement like:
+>
+    require('wincent.commandt').setup()
+<
+The are a number of private functions that are defined inside the plug-in that
+are for internal use only. To make clear where the public/private boundary
+falls, all internal functions are nested under `wincent.commandt.private`. As
+such, if you were to require one of these, be aware that none of these APIs
+are documented and they could change without notice at any time; for example:
+>
+    local Window = require('wincent.commandt.private.window').Window
+<
+
+                                                *commandt.setup()*
+|commandt.setup()|
+>
+    require('wincent.commandt').setup({
+      always_show_dot_files = false,
+      height = 15,
+      ignore_case = nil, -- nil means "infer from Neovim's 'ignorecase'".
+      mappings = {
+        i = {
+          ['<C-a>'] = '<Home>',
+          ['<C-c>'] = 'close',
+          ['<C-e>'] = '<End>',
+          ['<C-h>'] = '<Left>',
+          ['<C-j>'] = 'select_next',
+          ['<C-k>'] = 'select_previous',
+          ['<C-l>'] = '<Right>',
+          ['<C-n>'] = 'select_next',
+          ['<C-p>'] = 'select_previous',
+          ['<C-s>'] = 'open_split',
+          ['<C-t>'] = 'open_tab',
+          ['<C-v>'] = 'open_vsplit',
+          ['<CR>'] = 'open',
+          ['<Down>'] = 'select_next',
+          ['<Up>'] = 'select_previous',
+        },
+        n = {
+          ['<C-a>'] = '<Home>',
+          ['<C-c>'] = 'close',
+          ['<C-e>'] = '<End>',
+          ['<C-h>'] = '<Left>',
+          ['<C-j>'] = 'select_next',
+          ['<C-k>'] = 'select_previous',
+          ['<C-l>'] = '<Right>',
+          ['<C-n>'] = 'select_next',
+          ['<C-p>'] = 'select_previous',
+          ['<C-s>'] = 'open_split',
+          ['<C-t>'] = 'open_tab',
+          ['<C-u>'] = 'clear',
+          ['<C-v>'] = 'open_vsplit',
+          ['<CR>'] = 'open',
+          ['<Down>'] = 'select_next',
+          ['<Esc>'] = 'close',
+          ['<Up>'] = 'select_previous',
+          ['H'] = 'select_first',
+          ['M'] = 'select_middle',
+          ['G'] = 'select_last',
+          ['L'] = 'select_last',
+          ['gg'] = 'select_first',
+          ['j'] = 'select_next',
+          ['k'] = 'select_previous',
+        },
+      },
+      margin = 10,
+      never_show_dot_files = false,
+      order = 'forward', -- 'forward' or 'reverse'.
+      position = 'center', -- 'bottom', 'center' or 'top'.
+      open = function(item, kind)
+        commandt.open(item, kind)
+      end,
+      scanners = {
+        git = {
+          submodules = true,
+          untracked = false,
+        },
+      },
+      selection_highlight = 'PMenuSel',
+      smart_case = nil, -- nil means "infer from Neovim's 'smartcase'".
+      threads = nil, -- nil means "auto".
+    })
+<
+
+MAPPINGS                                        *command-t-mappings*
+
+See also |command-t-ruby-mappings| for older mappings.
+
+
+OPTIONS                                         *command-t-options*
+
+See also |command-t-ruby-options| for older options.
+
+
+FAQ                                             *command-t-faq*
+
+See also |command-t-ruby-faq| for older FAQs.
+
+
+TIPS                                            *command-t-tips*
+
+See also |command-t-ruby-tips| for older tips.
+
+
+AUTHORS                                         *command-t-authors*
+
+Command-T is written and maintained by Greg Hurrell <greg@hurrell.net>.
+Other contributors that have submitted patches include, in alphabetical order:
+
+  Abhinav Gupta                   Nate Kane
+  Adrian Keet                     Nicholas T.
+  Aleksandrs Ļedovskis            Nicolas Alpi
+  Alexey Terekhov                 Nikolai Aleksandrovich Pavlov
+  Andrea Cedraro                  Nilo César Teixeira
+  Andrius Grabauskas              Noon Silk
+  Andy Waite                      Ole Petter Bang
+  Anthony Panozzo                 Patrick Hayes
+  Artem Nezvigin                  Paul Jolly
+  Ben Boeckel                     Pavel Sergeev
+  Brendan Mulholland              Rainux Luo
+  Cody Buell                      Richard Feldman
+  Daniel Burgess                  Roland Puntaier
+  Daniel Hahler                   Ross Lagerwall
+  David Emett                     Sam Morris
+  David Szotten                   Scott Bronson
+  Douglas Drumond                 Seth Fowler
+  Emily Strickland                Sherzod Gapirov
+  Felix Tjandrawibawa             Shlomi Fish
+  Gary Bernhardt                  Stefan Schmidt
+  Henric Trotzig                  Stephen Gelman
+  Ivan Ukhov                      Steve Herrell
+  Jakob Pfender                   Steven Moazami
+  Jeff Kreeftmeijer               Steven Stallion
+  Jerome Castaneda                Sung Pae
+  Joe Lencioni                    Thomas Pelletier
+  KJ Tsanaktsidis                 Todd Derr
+  Kevin Webster                   Ton van den Heuvel
+  Kien Nguyen Duc                 Victor Hugo Borja
+  Lucas de Vries                  Vlad Seghete
+  Marcus Brito                    Vít Ondruch
+  Marian Schubert                 Woody Peterson
+  Matthew Todd                    Yan Pritzker
+  Max Timkovich                   Zak Johnson
+  Mike Lundy                      xiaodezhang
+  Nadav Samet
+
+This list produced with:
+
+    :read !git shortlog -s HEAD | grep -v 'Greg Hurrell' | cut -f 2-3 | column -c 72 | expand | sed -e 's/^/  /'
+
+Additionally, Hanson Wang, Jacek Wysocki, Kevin Cox, and Yiding Jia wrote
+patches which were not directly included but which served as a model for
+changes that did end up making it in.
+
+As this was the first Vim plug-in I had ever written I was heavily influenced
+by the design of the LustyExplorer plug-in by Stephen Bach, which I understand
+was one of the largest Ruby-based Vim plug-ins at the time.
+
+While the Command-T codebase doesn't contain any code directly copied from
+LustyExplorer, I did use it as a reference for answers to basic questions (like
+"How do you do 'X' in a Ruby-based Vim plug-in?"), and also copied some basic
+architectural decisions (like the division of the code into Prompt, Settings
+and MatchWindow classes).
+
+LustyExplorer is available from:
+
+  http://www.vim.org/scripts/script.php?script_id=1890
+
+
+DEVELOPMENT                                     *command-t-development*
+
+Development in progress can be inspected at:
+
+  https://github.com/wincent/command-t
+
+the clone URL for which is:
+
+  https://github.com/wincent/command-t.git
+
+The canonical upstream is hosted at:
+
+  https://git.wincent.com/command-t.git
+
+Mirrors exist on GitLab and BitBucket, and are automatically updated once per
+hour:
+
+  https://gitlab.com/wincent/command-t
+  https://bitbucket.org/ghurrell/command-t
+
+Patches are welcome via the usual mechanisms (pull requests, email, posting to
+the project issue tracker etc).
+
+As many users choose to track Command-T using Pathogen or similar, which often
+means running a version later than the last official release, the intention is
+that the "main" branch should be kept in a stable and reliable state as much
+as possible.
+
+Riskier changes are first cooked on the "next" branch for a period
+before being merged into "main". You can track this branch if you're
+feeling wild and experimental, but note that the "next" branch may
+periodically be rewound (force-updated) to keep it in sync with the
+"main" branch after each official release.
+
+The release process is:
+
+1. Update the version in `lua/wincent/commandt/version.lua`.
+2. Update |command-t-history|.
+3. Commit with a message like "chore: prepare for 6.0.0 release".
+4. Create a signed tag with `git tag -s -m '6.0.0 release` (or similar).
+5. Publish with `git push origin --follow-tags` (or similar).
+6. Create GitHub release and publish release notes.
+7. Create archive (eg. `git archive -o command-t-6.0.0-b.1.zip HEAD -- .` or
+   similar).
+8. Upload to vim.org (http://www.vim.org/scripts/script.php?script_id=3025).
+
+
+WEBSITE                                         *command-t-website*
+
+The official website for Command-T is:
+
+  https://github.com/wincent/command-t
+
+The latest release will always be available from:
+
+  https://github.com/wincent/command-t/releases
+
+A copy of each release is also available from the official Vim scripts site
+at:
+
+  http://www.vim.org/scripts/script.php?script_id=3025
+
+Bug reports should be submitted to the issue tracker at:
+
+  https://github.com/wincent/command-t/issues
+
+
+RELATED PROJECTS                                *command-t-related-projects*
+
+fuzzy-native ~
+
+Command-T's matching algorithm ported to C++ and wrapped inside a Node NPM
+module:
+
+  https://github.com/hansonw/fuzzy-native
+
+ctrlp-cmatcher ~
+
+Command-T's matching algorithm wrapped in a Python extension, for use with
+the CtrlP Vim plug-in:
+
+  https://github.com/JazzCore/ctrlp-cmatcher
+
+commandt.score ~
+
+Command-T's match-scoring algorithm wrapped in a Python extension:
+
+  https://pypi.python.org/pypi/commandt.score
+
+
+LICENSE                                         *command-t-license*
+
+Copyright 2010-present Greg Hurrell and contributors.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice,
+   this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+
+
+HISTORY                                         *command-t-history*
+
+main (not yet released) ~
+
+- ...
+
+6.0.0-b.1 (16 December 2022) ~
+
+- fix: actually respect `scanners.git.submodules` and `scanners.git.untracked`
+  options in |commandt.setup()| (https://github.com/wincent/command-t/pull/414).
+- fix: avoid "invalid option" error to `format` at specific window dimensions
+  (https://github.com/wincent/command-t/issues/415).
+
+6.0.0-b.0 (21 October 2022) ~
+
+- feat: add back |:CommandTLine| finder
+  (https://github.com/wincent/command-t/pull/408).
+
+6.0.0-a.4 (5 September 2022) ~
+
+- fix: use correct `git ls-files` switch when `scanners.git.untracked` is `true`
+  (https://github.com/wincent/command-t/pull/405).
+- fix: make Watchman scanner work with a path argument
+  (https://github.com/wincent/command-t/commit/c7020a44cfddfb87).
+- feat: show "fallback" in prompt title if a fallback scanner kicks in
+  (https://github.com/wincent/command-t/commit/c16b2721fdad1d0b).
+
+6.0.0-a.3 (31 August 2022) ~
+
+- fix: fix build problem on 32-bit systems; this was a regression introduced
+  in 6.0.0-a.2 (https://github.com/wincent/command-t/commit/6c8e2a3e3b5acd00).
+- docs: drop unnecessary `{ remap = true }` from mapping instructions
+  (https://github.com/wincent/command-t/pull/401)
+- feat: implement fallback for when `find`, `git`, or `rg` return no results
+  (https://github.com/wincent/command-t/commit/9e8c790ca718b40f2).
+- refactor: hide standard error output from `find`, `git` and `rg`
+  (https://github.com/wincent/command-t/commit/b229d929ae2a55a7b).
+- fix: don't let control characters mess up the display
+  (https://github.com/wincent/command-t/issues/402).
+
+6.0.0-a.2 (29 August 2022) ~
+
+- fix: fix rendering glitches due to interaction with vim-dirvish
+  (https://github.com/wincent/command-t/commit/ca959c9437d13ca0).
+- feat: teach prompt window to delete a word with `<C-w>`
+  (https://github.com/wincent/command-t/commit/0a19ffbe7bed4988).
+- fix: avoid aborts on 32-bit systems
+  (https://github.com/wincent/command-t/issues/399).
+
+6.0.0-a.1 (28 August 2022) ~
+
+- fix: gracefully handle |commandt.setup()| calls without a `finders` config.
+  (https://github.com/wincent/command-t/commit/e59f7406a565b574).
+- refactor: get rid of a potentially confusing diagnostic message
+  (https://github.com/wincent/command-t/commit/05b434a7dd3e2963).
+- docs: add documentation for the |:CommandTFind|, |:CommandTGit|,
+  |:CommandTRipgrep|, and |:CommandTWatchman| commands
+  (https://github.com/wincent/command-t/commit/c488f7f41e863398).
+
+6.0.0-a.0 (26 August 2022) ~
+
+- Rewrite in Lua; for more details see |command-t-upgrading|. Note that this
+  is an alpha release, so the new APIs are subject to change.
+
+5.0.5 (24 July 2022) ~
+
+- Teach watchman scanner to favor `watch-project` over `watch` when
+  available (#390, patch from Todd Derr).
+
+5.0.4 (28 May 2022) ~
+
+- Support opening files which contain newlines (#365).
+- Guard against possible |E315| on accepting a selection.
+- Fix possible |E434| when trying to jump to some help targets.
+- Use |execute()| when available to avoid possible issues with
+  potentially nested calls to |:redir|.
+- Fix conflict with vim-cool plugin (#354).
+- Close match listing after buffer deletion to avoid likely errors on
+  subsequent interactions (#357, patch from Andrius Grabauskas).
+- Fix |E116| error opening filenames containing single quotes.
+- Deal with |'wildignore'| (and |g:CommandTWildIgnore|) patterns of the form
+  "*pattern" (eg. "*~", which would ignore files created with Vim's default
+  |'backupext'|) (#369, patch from Steve Herrell).
+- Turn off |'signcolumn'| in the match listing (#376).
+- Teach file scanner to skip over badly encoded strings.
+- Teach watchman scanner to tolerate broken watchman installation.
+
+5.0.3 (19 September 2018) ~
+
+- Fix unlisted buffers showing up in |:CommandTBuffer| listing on Neovim.
+- Fix edge cases with opening selections in tabs (#315).
+- Fix possible degenerate performance of |:CommandTBuffer| and
+  |:CommandTMRU| on Neovim.
+- Handle missing match listing buffer in Neovim (#342).
+
+5.0.2 (7 September 2017) ~
+
+- Fix a RangeError on 64-bit Windows (#304, patch from Adrian Keet).
+- Fix issue switching back to previously opened file in another tab (#306).
+- Fix inability to open some help targets with |:CommandTHelp| (#307).
+- Similar to #307, make |:CommandTCommand| work with commands containing
+  special characters.
+- Again similar to #307, prevent special characters in tags from being escaped
+  when using |:CommandTTag|.
+
+5.0.1 (18 August 2017) ~
+
+- Fixed inability to open a top-level file with a name matching a previously
+  opened file (#295).
+- Fixed a related issue where previously opened file would cause a file to be
+  opened directly rather than in the desired split/tab (#298).
+- Tweaked <c-w> mapping behavior to better match what other readline-ish
+  implementations do, especially with respect to moving past punctuation
+  (#301).
+
+5.0 (6 June 2017) ~
+
+- Command-T now uses |:map-<nowait>|, when available, when setting up mappings.
+- 'wildignore' filtering is now always performed by producing an equivalent
+  regular expression and applying that; previously this only happened with
+  the "watchman" file scanner (includes a bug fix from Henric Trotzig).
+- Fixed mis-memoization of |:CommandTHelp| and |:CommandTJump| finders
+  (whichever one you used first would be used for both).
+- Added mapping (<C-d>) to delete a buffer from the buffer list (patch from
+  Max Timkovich).
+- Added |g:CommandTGitIncludeUntracked| option (patch from Steven Stallion).
+- Added |:CommandTOpen|, which implements smart "goto or open" functionality,
+  and adjust |g:CommandTAcceptSelectionCommand|,
+  |g:CommandTAcceptSelectionTabCommand|,
+  |g:CommandTAcceptSelectionSplitCommand|, and
+  |g:CommandTAcceptSelectionVSplitCommand| to use it by default. Their default
+  values have been changed from "e", "tabe", "sp" and "vs" to "CommandTOpen
+  e", "CommandTOpen tabe", "CommandTOpen sp" and "CommandTOpen vs",
+  respectively. Use with |'switchbuf'| set to "usetab" for maximum effect.
+- Added |g:CommandTWindowFilter| for customizing the filtering expression that
+  is used to determine which windows Command-T should not open selected
+  files in.
+
+4.0 (16 May 2016) ~
+
+- A non-leading dot in the search query can now match against dot-files and
+  "dot-directories" in non-leading path components.
+- Matching algorithm sped up by about 17x (with help from Hanson Wang).
+- |g:CommandTInputDebounce| now defaults to 0, as the recent optimizations
+  make debouncing largely unnecessary.
+- Added |:CommandTHelp| for jumping to locations in the help, and an
+  accompanying mapping, |<Plug>(CommandTHelp)|.
+- Added |:CommandTLine| for jumping to lines within the current buffer, and a
+  corresponding mapping, |<Plug>(CommandTLine)|.
+- Added |:CommandTHistory| for jumping to previously entered commands, and a
+  corresponding mapping, |<Plug>(CommandTHistory)|.
+- Added |:CommandTSearch| for jumping to previously entered searches, and a
+  corresponding mapping, |<Plug>(CommandTSearch)|.
+- Added |:CommandTCommand| for finding commands, and a corresponding mapping,
+  |<Plug>(CommandTCommand)|.
+- Added |<Plug>(CommandTMRU)| and |<Plug>(CommandTTag)| mappings.
+- The "ruby" and "find" scanners now show numerical progress in the prompt
+  area during their scans.
+- Removed functionality that was previously deprecated in 2.0.
+- Fix inability to type "^" and "|" at the prompt.
+- Make it possible to completely disable |'wildignore'|-based filtering by
+  setting |g:CommandTWildIgnore| to an empty string.
+- The "watchman" file scanner now respects |'wildignore'| and
+  |g:CommandTWildIgnore| by constructing an equivalent regular expression and
+  using that for filtering.
+- Show a warning when hitting |g:CommandTMaxFiles|, and add a corresponding
+  |g:CommandTSuppressMaxFilesWarning| setting to suppress the warning.
+
+3.0.2 (9 February 2016) ~
+
+- Minimize flicker on opening and closing the match listing in MacVim.
+- Add |CommandTWillShowMatchListing| and |CommandTDidHideMatchListing| "User"
+  autocommands.
+
+3.0.1 (25 January 2016) ~
+
+- restore compatibility with Ruby 1.8.7.
+
+3.0 (19 January 2016) ~
+
+- change |g:CommandTIgnoreSpaces| default value to 1.
+- change |g:CommandTMatchWindowReverse| default value to 1.
+- change |g:CommandTMaxHeight| default value to 15.
+- try harder to avoid scrolling other buffer when showing or hiding the match
+  listing
+
+2.0 (28 December 2015) ~
+
+- add |:CommandTIgnoreSpaces| option (patch from KJ Tsanaktsidis)
+- make Command-T resilient to people deleting its hidden, unlisted buffer
+- the match listing buffer now has filetype "command-t", which may be useful
+  for detectability/extensibility
+- Command-T now sets the name of the match listing buffer according to how it
+  was invoked (ie. for the file finder, the name is "Command-T [Files]", for
+  the buffer finder, the name is "Command-T [Buffers]", and so on);
+  previously the name was a fixed as "GoToFile" regardless of the active
+  finder type
+- Many internal function names have changed, so if you or your plug-ins are
+  calling those internals they will need to be updated:
+  - `commandt#CommandTFlush()` is now `commandt#Flush()`
+  - `commandt#CommandTLoad()` is now `commandt#Load()`
+  - `commandt#CommandTShowBufferFinder()` is now `commandt#BufferFinder()`
+  - `commandt#CommandTShowFileFinder()` is now `commandt#FileFinder()`
+  - `commandt#CommandTShowJumpFinder()` is now `commandt#JumpFinder()`
+  - `commandt#CommandTShowMRUFinder()` is now `commandt#MRUFinder()`
+  - `commandt#CommandTShowTagFinder()` is now `commandt#TagFinder()`
+- A number of functions have been turned into "private" autoloaded functions,
+  to make it clear that they are intended only for internal use:
+  - `CommandTAcceptSelection()` is now `commandt#private#AcceptSelection()`
+  - `CommandTAcceptSelectionSplit()` is now `commandt#private#AcceptSelectionSplit()`
+  - `CommandTAcceptSelectionTab()` is now `commandt#private#AcceptSelectionTab()`
+  - `CommandTAcceptSelectionVSplit()` is now `commandt#private#AcceptSelectionVSplit()`
+  - `CommandTBackspace()` is now `commandt#private#Backspace()`
+  - `CommandTCancel()` is now `commandt#private#Cancel()`
+  - `CommandTClear()` is now `commandt#private#Clear()`
+  - `CommandTClearPrevWord()` is now `commandt#private#ClearPrevWord()`
+  - `CommandTCursorEnd()` is now `commandt#private#CursorEnd()`
+  - `CommandTCursorLeft()` is now `commandt#private#CursorLeft()`
+  - `CommandTCursorRight()` is now `commandt#private#CursorRight()`
+  - `CommandTCursorStart()` is now `commandt#private#CursorStart()`
+  - `CommandTDelete()` is now `commandt#private#Delete()`
+  - `CommandTHandleKey()` is now `commandt#private#HandleKey()`
+  - `CommandTListMatches()` is now `commandt#private#ListMatches()`
+  - `CommandTQuickfix()` is now `commandt#private#Quickfix()`
+  - `CommandTRefresh()` is now `commandt#private#Refresh()`
+  - `CommandTSelectNext()` is now `commandt#private#SelectNext()`
+  - `CommandTSelectPrev()` is now `commandt#private#SelectPrev()`
+  - `CommandTToggleFocus()` is now `commandt#private#ToggleFocus()`
+- add |g:CommandTRecursiveMatch| option
+- stop distribution as a vimball in favor of a zip archive
+- don't clobber |alternate-file| name when opening Command-T match listing
+  (patch from Jerome Castaneda)
+- add |g:CommandTCursorColor| option
+- expose mappings for |:CommandT| and |:CommandTBuffer| using `<Plug>`
+  mappings |<Plug>(CommandT)| and |<Plug>(CommandTBuffer)|
+- add `<Leader>j` mapping to |:CommandTJump|, via |<Plug>(CommandTJump)|
+  (defined only if no pre-existing mapping exists)
+
+1.13 (29 April 2015) ~
+
+- avoid "W10: Warning: Changing a readonly file" when starting Vim in
+  read-only mode (ie. as `view` or with the `-R` option)
+- fix infinite loop on |<Tab>| (regression introduced in 1.12)
+
+1.12 (9 April 2015) ~
+
+- add |:CommandTLoad| command
+- fix rare failure to restore cursor color after closing Command-T (patch from
+  Vlad Seghete)
+- doc fixes and updates (patches from Daniel Hahler and Nicholas T.)
+- make it possible to force reloading of the plug-in (patch from Daniel
+  Hahler)
+- add |g:CommandTEncoding| option, to work around rare encoding compatibility
+  issues
+- fix error restoring cursor highlights involving some configurations (patch
+  from Daniel Hahler)
+- skip set-up of |<Esc>| key mapping on rxvt terminals (patch from Daniel
+  Hahler)
+- add |g:CommandTGitScanSubmodules| option, which can be used to recursively
+  scan submodules when the "git" file scanner is used (patch from Ben Boeckel)
+- fix for not falling back to "find"-based scanner when a Watchman-related
+  error occurs
+
+1.11.4 (4 November 2014) ~
+
+- fix infinite loop on Windows when |g:CommandTTraverseSCM| is set to a value
+  other than "pwd" (bug present since 1.11)
+- handle unwanted split edgecase when |'hidden'| is set, the current buffer is
+  modified, and it is visible in more than one window
+
+1.11.3 (10 October 2014) ~
+
+- ignore impromperly encoded filenames (patch from Sherzod Gapirov)
+- fix failure to update path when using |:cd| in conjunction with
+  |g:CommandTTraverseSCM| set to "pwd" (bug present since 1.11.2)
+
+1.11.2 (2 September 2014) ~
+
+- fix error while using Command-T outside of an SCM repo (bug present since
+  1.11.1)
+
+1.11.1 (29 August 2014) ~
+
+- compatibility fixes with Ruby 1.8.6 (patch from Emily Strickland)
+- compatibility fixes with Ruby 1.8.5
+- fix 'wildignore' being ignored (bug present since 1.11)
+- fix current working directory being ignored when |g:CommandTTraverseSCM| is
+  set to "pwd" (bug present since 1.11)
+- performance improvements
+
+1.11 (15 August 2014) ~
+
+- improve edge-case handling in match results window code (patches from
+  Richard Feldman)
+- add "git" file scanner (patch from Patrick Hayes)
+- speed-up when 'wildignore' is unset (patch from Patrick Hayes)
+- add |g:CommandTTraverseSCM| setting which anchors Command-T's file finder to
+  the nearest SCM directory (based on patches from David Szotten and Ben
+  Osheroff)
+- add AppStream metadata (patch from Vít Ondruch)
+
+1.10 (15 July 2014) ~
+
+- improve tag finder performance by caching tag lists (patch from Artem
+  Nezvigin)
+- consider the |'autowriteall'| option when deciding whether to open a file in
+  a split
+- make selection acceptance commands configurable (patch from Ole Petter Bang)
+- add <C-w> mapping to delete previous word of the match prompt (patch from
+  Kevin Webster)
+- try harder to always clear status line after closing the match listing
+  (patch from Ton van den Heuvel)
+- don't allow MRU autocommands to produce errors when the extension has not
+  been compiled
+- add |g:CommandTIgnoreCase| and |g:CommandTSmartCase| options, providing
+  support for case-sensitive matching (based on patch from Jacek Wysocki)
+
+1.9.1 (30 May 2014) ~
+
+- include the file in the release archive that was missing from the
+  1.9 release
+
+1.9 (25 May 2014) ~
+
+- improved startup time using Vim's autload mechanism (patch from Ross
+  Lagerwall)
+- added MRU (most-recently-used) buffer finder (patch from Ton van den Heuvel)
+- fixed edge case in matching algorithm which could cause spurious matches
+  with queries containing repeated characters
+- fixed slight positive bias in the match scoring algorithm's weighting of
+  matching characters based on distance from last match
+- tune memoization in match scoring algorithm, yielding a more than 10% speed
+  boost
+
+1.8 (31 March 2014) ~
+
+- taught Watchman file scanner to use the binary protocol instead of JSON,
+  roughly doubling its speed
+- build changes to accommodate MinGW (patch from Roland Puntaier)
+
+1.7 (9 March 2014) ~
+
+- added |g:CommandTInputDebounce|, which can be used to improve responsiveness
+  in large file hierarchies (based on patch from Yiding Jia)
+- added a potentially faster file scanner which uses the `find` executable
+  (based on patch from Yiding Jia)
+- added a file scanner that knows how to talk to Watchman
+  (https://github.com/facebook/watchman)
+- added |g:CommandTFileScanner|, which can be used to switch file scanners
+- fix processor count detection on some platforms (patch from Pavel Sergeev)
+
+1.6.1 (22 December 2013) ~
+
+- defer processor count detection until runtime (makes it possible to sensibly
+  build Command-T on one machine and use it on another)
+
+1.6 (16 December 2013) ~
+
+- on systems with POSIX threads (such as OS X and Linux), Command-T will use
+  threads to compute match results in parallel, resulting in a large speed
+  boost that is especially noticeable when navigating large projects
+
+1.5.1 (23 September 2013) ~
+
+- exclude large benchmark fixture file from source exports (patch from Vít
+  Ondruch)
+
+1.5 (18 September 2013) ~
+
+- don't scan "pathological" filesystem structures (ie. circular or
+  self-referential symlinks; patch from Marcus Brito)
+- gracefully handle files starting with "+" (patch from Ivan Ukhov)
+- switch default selection highlight color for better readability (suggestion
+  from André Arko), but make it possible to configure via the
+  |g:CommandTHighlightColor| setting
+- added a mapping to take the current matches and put then in the quickfix
+  window
+- performance improvements, particularly noticeable with large file
+  hierarchies
+- added |g:CommandTWildIgnore| setting (patch from Paul Jolly)
+
+1.4 (20 June 2012) ~
+
+- added |:CommandTTag| command (patches from Noon Silk)
+- turn off |'colorcolumn'| and |'relativenumber'| in the match window (patch
+  from Jeff Kreeftmeijer)
+- documentation update (patch from Nicholas Alpi)
+- added |:CommandTMinHeight| option (patch from Nate Kane)
+- highlight (by underlining) matched characters in the match listing (requires
+  Vim to have been compiled with the +conceal feature, which is available in
+  Vim 7.3 or later; patch from Steven Moazami)
+- added the ability to flush the cache while the match window is open using
+  <C-f>
+
+1.3.1 (18 December 2011) ~
+
+- fix jumplist navigation under Ruby 1.9.x (patch from Woody Peterson)
+
+1.3 (27 November 2011) ~
+
+- added the option to maintain multiple caches when changing among
+  directories; see the accompanying |g:CommandTMaxCachedDirectories| setting
+- added the ability to navigate using the Vim jumplist (patch from Marian
+  Schubert)
+
+1.2.1 (30 April 2011) ~
+
+- Remove duplicate copy of the documentation that was causing "Duplicate tag"
+  errors
+- Mitigate issue with distracting blinking cursor in non-GUI versions of Vim
+  (patch from Steven Moazami)
+
+1.2 (30 April 2011) ~
+
+- added |g:CommandTMatchWindowReverse| option, to reverse the order of items
+  in the match listing (patch from Steven Moazami)
+
+1.1b2 (26 March 2011) ~
+
+- fix a glitch in the release process; the plugin itself is unchanged since
+  1.1b
+
+1.1b (26 March 2011) ~
+
+- add |:CommandTBuffer| command for quickly selecting among open buffers
+
+1.0.1 (5 January 2011) ~
+
+- work around bug when mapping |:CommandTFlush|, wherein the default mapping
+  for |:CommandT| would not be set up
+- clean up when leaving the Command-T buffer via unexpected means (such as
+  with <C-W k> or similar)
+
+1.0 (26 November 2010) ~
+
+- make relative path simplification work on Windows
+
+1.0b (5 November 2010) ~
+
+- work around platform-specific Vim 7.3 bug seen by some users (wherein
+  Vim always falsely reports to Ruby that the buffer numbers is 0)
+- re-use the buffer that is used to show the match listing, rather than
+  throwing it away and recreating it each time Command-T is shown; this
+  stops the buffer numbers from creeping up needlessly
+
+0.9 (8 October 2010) ~
+
+- use relative paths when opening files inside the current working directory
+  in order to keep buffer listings as brief as possible (patch from Matthew
+  Todd)
+
+0.8.1 (14 September 2010) ~
+
+- fix mapping issues for users who have set |'notimeout'| (patch from Sung
+  Pae)
+
+0.8 (19 August 2010) ~
+
+- overrides for the default mappings can now be lists of strings, allowing
+  multiple mappings to be defined for any given action
+- <Leader>t mapping only set up if no other map for |:CommandT| exists
+  (patch from Scott Bronson)
+- prevent folds from appearing in the match listing
+- tweaks to avoid the likelihood of "Not enough room" errors when trying to
+  open files
+- watch out for "nil" windows when restoring window dimensions
+- optimizations (avoid some repeated downcasing)
+- move all Ruby files under the "command-t" subdirectory and avoid polluting
+  the "Vim" module namespace
+
+0.8b (11 July 2010) ~
+
+- large overhaul of the scoring algorithm to make the ordering of returned
+  results more intuitive; given the scope of the changes and room for
+  optimization of the new algorithm, this release is labelled as "beta"
+
+0.7 (10 June 2010) ~
+
+- handle more |'wildignore'| patterns by delegating to Vim's own |expand()|
+  function; with this change it is now viable to exclude patterns such as
+  'vendor/rails/**' in addition to filename-only patterns like '*.o' and
+  '.git' (patch from Mike Lundy)
+- always sort results alphabetically for empty search strings; this eliminates
+  filesystem-specific variations (patch from Mike Lundy)
+
+0.6 (28 April 2010) ~
+
+- |:CommandT| now accepts an optional parameter to specify the starting
+  directory, temporarily overriding the usual default of Vim's |:pwd|
+- fix truncated paths when operating from root directory
+
+0.5.1 (11 April 2010) ~
+
+- fix for Ruby 1.9 compatibility regression introduced in 0.5
+- documentation enhancements, specifically targetted at Windows users
+
+0.5 (3 April 2010) ~
+
+- |:CommandTFlush| now re-evaluates settings, allowing changes made via |let|
+  to be picked up without having to restart Vim
+- fix premature abort when scanning very deep directory hierarchies
+- remove broken |<Esc>| key mapping on vt100 and xterm terminals
+- provide settings for overriding default mappings
+- minor performance optimization
+
+0.4 (27 March 2010) ~
+
+- add |g:CommandTMatchWindowAtTop| setting (patch from Zak Johnson)
+- documentation fixes and enhancements
+- internal refactoring and simplification
+
+0.3 (24 March 2010) ~
+
+- add |g:CommandTMaxHeight| setting for controlling the maximum height of the
+  match window (patch from Lucas de Vries)
+- fix bug where |'list'| setting might be inappropriately set after dismissing
+  Command-T
+- compatibility fix for different behaviour of "autoload" under Ruby 1.9.1
+- avoid "highlight group not found" warning when run under a version of Vim
+  that does not have syntax highlighting support
+- open in split when opening normally would fail due to |'hidden'| and
+  |'modified'| values
+
+0.2 (23 March 2010) ~
+
+- compatibility fixes for compilation under Ruby 1.9 series
+- compatibility fixes for compilation under Ruby 1.8.5
+- compatibility fixes for Windows and other non-UNIX platforms
+- suppress "mapping already exists" message if <Leader>t mapping is already
+  defined when plug-in is loaded
+- exclude paths based on |'wildignore'| setting rather than a hardcoded
+  regular expression
+
+0.1 (22 March 2010) ~
+
+- initial public release
+
+------------------------------------------------------------------------------
+vim:ts=8:tw=78:ft=help:
