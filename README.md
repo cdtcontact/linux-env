@@ -14,7 +14,7 @@
    apt install wget -y
    ```
 4. 下载自己的环境配置脚本
-改成自己的 GitHub 地址：
+自己的 GitHub 地址：
    ```
    wget https://raw.githubusercontent.com/cdtcontact/linux-env/main/install.sh
    ```
@@ -36,4 +36,4 @@
    wget https://raw.githubusercontent.com/cdtcontact/linux-env/main/init_env.sh
    bash init_env.sh
    ```
-这样就会直接使用你 GitHub 上自己的 Linux 配置脚本。
+这样，C/C++的环境配置就完成了。
