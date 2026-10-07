@@ -3,3 +3,4 @@
 .ssh/
 *.key
 *.pem
+.vim/systags
