@@ -1,0 +1,41 @@
+name: ruby
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - '**'
+
+jobs:
+  style:
+    runs-on: ubuntu-22.04
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
+    steps:
+      - uses: actions/checkout@v3
+      - uses: jidicula/clang-format-action@v4.8.0
+        with:
+          clang-format-version: "14"
+          check-path: ruby
+
+  test:
+    runs-on: ubuntu-22.04
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install libraries
+        run: |
+          set -x
+          sudo apt-get update -q || :
+          sudo apt-get install --no-install-recommends -q -y build-essential ruby-dev bundler
+      - name: Build extension
+        run: |
+          pushd ./ruby/command-t/ext/command-t
+          ruby extconf.rb --vendor
+          make
+          popd
+      - name: Install dependencies
+        run: bundle install
+      - name: Run tests
+        run: bundle exec rspec -Iruby

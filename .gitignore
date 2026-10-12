@@ -1,0 +1,25 @@
+# Local OS/editor noise
+.DS_Store
+*.swp
+*.swo
+*.un~
+*.zwc
+
+# Personal shell/editor history, caches, and SSH material must never be committed
+.viminfo
+.zsh_history
+.bash_history
+.zcompdump*
+.ssh/
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+known_hosts
+authorized_keys
+
+# Machine-specific generated Vim tags index
+payload/home/.vim/systags
+
+# Nested VCS metadata from bundled third-party repositories
+**/.git/
