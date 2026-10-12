@@ -5,7 +5,7 @@
 sudo -i
 apt-get update
 apt-get install -y wget ca-certificates
-wget -O /root/init_env.sh https://raw.githubusercontent.com/cdtcontact/linux-env/main/init_env.sh
+wget -O /root/init_env.sh https://raw.giteeusercontent.com/peacecdt/linux-env/raw/main/init_env.sh
 bash /root/init_env.sh
 ```
 安装器会克隆整个仓库，安装基础软件包，提示选择要配置的普通用户名；用户名不存在时会创建，若已存在则不会删除或重建。它会备份准备替换的 `.vim`、`.vimrc`、`.zshrc`、`.oh-my-zsh`，并在新建用户时尽可能复制调用者的 `authorized_keys`（只复制公钥，不复制私钥）。安装完成后先验证新用户登录，再关闭原连接。
