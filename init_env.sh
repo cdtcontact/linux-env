@@ -4,7 +4,7 @@
 # it does not download the teacher's old scripts or plugins from legacy hosts.
 set -Eeuo pipefail
 
-REPO_URL="${LINUX_ENV_REPO_URL:-https://github.com/cdtcontact/linux-env.git}"
+REPO_URL="${LINUX_ENV_REPO_URL:-https://gitee.com/peacecdt/linux-env.git}"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR=""
 WORK_DIR=""
