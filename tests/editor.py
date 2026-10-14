@@ -102,6 +102,8 @@ def test_live_suggestions(root):
         'ZSH_AUTOSUGGEST_IGNORE_WIDGETS+=(linux-env-test-capture)\n'
         'linux-env-test-capture() {\n'
         '  print -r -- "${BUFFER}${POSTDISPLAY}" > ' + str(record) + '\n'
+        '  zle -I\n'
+        '  print -r -- SNAPSHOT-DONE\n'
         '  zle .send-break\n'
         '}\n'
         'zle -N linux-env-test-capture\n'
@@ -118,6 +120,7 @@ def test_live_suggestions(root):
             while time.monotonic() < until:
                 terminal.pump()
             os.write(terminal.fd, b"\x07")
+            terminal.expect(b"SNAPSHOT-DONE")
             terminal.expect(b"READY>")
             return record.read_text().strip()
 
