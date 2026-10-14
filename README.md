@@ -6,7 +6,7 @@
 
 ## 一键安装
 
-在 Ubuntu 中执行：
+先在 Ubuntu 中准备依赖（两种方式相同）：
 
 ```bash
 sudo -i
@@ -15,22 +15,30 @@ apt update
 apt upgrade -y
 apt autoremove -y
 apt install wget ca-certificates -y
+```
 
+**GitHub 仓库安装**：入口和后续配置均从 GitHub 下载。
+
+```bash
+wget -O init_env.sh https://raw.githubusercontent.com/cdtcontact/linux-env/main/init_env.sh
+bash init_env.sh
+```
+
+**Gitee 仓库安装**：入口和后续配置均从 Gitee 下载。
+
+```bash
 wget -O init_env.sh https://raw.giteeusercontent.com/peacecdt/linux-env/raw/main/init_env.sh
 bash init_env.sh
 ```
 
-如上面的 Gitee 文件地址无法访问，可换用以下任一下载入口，再执行 `bash init_env.sh`：
+Gitee 文件地址如无法访问，可换用同平台的备用入口：
 
 ```bash
-# Gitee 备用入口
 wget -O init_env.sh https://gitee.com/peacecdt/linux-env/raw/main/init_env.sh
-
-# GitHub 备用入口
-wget -O init_env.sh https://raw.githubusercontent.com/cdtcontact/linux-env/main/init_env.sh
+bash init_env.sh
 ```
 
-**默认从 Gitee 获取后续配置**，即使入口脚本从 GitHub 下载也是如此。安装器使用公开 HTTPS，不需要 Git 平台账号或 SSH 密钥；软件包仍从机器现有的 Ubuntu APT 源安装，不自动更换系统软件源或 pip 镜像。
+下载哪个平台的入口，就默认使用该平台获取后续配置，直接 `bash init_env.sh` 即可，无需额外参数。两个仓库的工具配置保持一致，各自入口的默认平台不同，也不会自动切换到另一平台。安装器使用公开 HTTPS，不需要 Git 平台账号或 SSH 密钥；软件包仍从机器现有的 Ubuntu APT 源安装，不自动更换系统软件源或 pip 镜像。
 
 安装器默认配置有效的 `SUDO_USER` 对应账号；没有该变量时配置 root。通过 `sudo -i` 进入 root 后，如需确保配置到已有普通用户，请明确指定用户名，例如：
 
@@ -129,7 +137,7 @@ bash init_env.sh --user alice --skip-packages
 bash init_env.sh --user alice --skip-checks
 ```
 
-默认从 [Gitee 仓库](https://gitee.com/peacecdt/linux-env) 的 `main` 下载配置；也可选择 [GitHub 仓库](https://github.com/cdtcontact/linux-env)、固定版本或自己的 fork：
+默认从入口所属仓库（[GitHub](https://github.com/cdtcontact/linux-env) 或 [Gitee](https://gitee.com/peacecdt/linux-env)）的 `main` 下载配置；需要时可手动切换平台、固定版本或使用自己的 fork：
 
 ```bash
 # 显式选择下载源
@@ -146,7 +154,7 @@ LINUX_ENV_REF="<分支、标签或提交>" bash init_env.sh
 LINUX_ENV_REPO_URL=https://gitee.com/你的账号/linux-env.git bash init_env.sh
 ```
 
-`LINUX_ENV_SOURCE` 默认为 `gitee`，只接受 `gitee` 或 `github`；命令行 `--source` 同样只接受这两个值。自定义仓库仍使用 `LINUX_ENV_REF` 指定版本。
+不设置 `LINUX_ENV_SOURCE` 时，GitHub 入口默认 `github`，Gitee 入口默认 `gitee`。该变量和命令行 `--source` 只接受 `gitee` 或 `github`；命令行优先于环境变量。自定义仓库仍使用 `LINUX_ENV_REF` 指定版本。
 
 固定版本时，请同时从该版本下载 `init_env.sh`，再将 `LINUX_ENV_REF` 设为同一版本。已克隆仓库可直接运行根目录的 `bash init_env.sh`，使用本地配置。
 
@@ -158,5 +166,7 @@ LINUX_ENV_REPO_URL=https://gitee.com/你的账号/linux-env.git bash init_env.sh
 - `examples/`：C、C++、Python 学习模板。
 - `archive/legacy/`、旧 `payload/`：历史配置归档，其中保留的上游 GitHub 链接不属于当前安装的网络依赖；安装流程不执行、不部署，也不下载其大型插件内容。
 - `.github/`：GitHub Actions 持续集成配置，安装器不使用。
+
+两端共享安装与开发配置；同步更新时，`init_env.sh` 顶部的 `DEFAULT_SOURCE` 在 GitHub 保持 `github`，在 Gitee 保持 `gitee`。自动测试会分别验证这两种入口的默认行为。
 
 网络或 APT 操作失败后，可修复网络或软件源并重跑同一命令。系统包和插件的版本跟随 Ubuntu 软件源；脚本声明支持的系统版本不代表所有版本都已完成真实机器验证。

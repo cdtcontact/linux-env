@@ -12,7 +12,14 @@ work_dir=$(mktemp -d /tmp/linux-env-bootstrap-test.XXXXXXXX)
 trap 'rm -rf -- "$work_dir"' EXIT
 fixture="$work_dir/source"
 mkdir -p "$fixture" "$work_dir/download" "$work_dir/bin"
-cp "$repo_root/init_env.sh" "$work_dir/download/init_env.sh"
+# Each published entry differs only in its platform default. Exercise both
+# standalone files, regardless of which platform's checkout runs this test.
+[[ $(grep -Ec '^DEFAULT_SOURCE=(github|gitee)$' "$repo_root/init_env.sh") == 1 ]]
+for source_name in github gitee; do
+    mkdir -p "$work_dir/download/$source_name"
+    sed "s/^DEFAULT_SOURCE=.*/DEFAULT_SOURCE=$source_name/" \
+        "$repo_root/init_env.sh" >"$work_dir/download/$source_name/init_env.sh"
+done
 cp "$repo_root/init_env.sh" "$fixture/init_env.sh"
 cp -R "$repo_root/scripts" "$repo_root/config" "$repo_root/examples" "$fixture/"
 # These sentinels must remain outside the sparse working tree.
@@ -82,12 +89,13 @@ useradd --create-home --shell /bin/bash bootlearner
 
 run_bootstrap() {
     local expected_remote=$1
-    shift
+    local entry_source=$2
+    shift 2
     : >"$LINUX_ENV_GIT_LOG"
     : >"$LINUX_ENV_CHECKOUT_RECORD"
     env -u LINUX_ENV_SOURCE -u LINUX_ENV_REPO_URL \
         PATH="$work_dir/bin:$PATH" LINUX_ENV_REF="$fixture_revision" \
-        "$@" bash "$work_dir/download/init_env.sh" \
+        "$@" bash "$work_dir/download/$entry_source/init_env.sh" \
         --user bootlearner --skip-packages --skip-checks --no-change-shell
     [[ -f /home/bootlearner/.config/linux-env/gitconfig ]]
     grep -Fq "remote add origin $expected_remote " "$LINUX_ENV_GIT_LOG"
@@ -109,11 +117,13 @@ exec "$@" --source "$source_name"
 SOURCE
 chmod 0755 "$work_dir/bin/bootstrap-with-source"
 
-run_bootstrap https://gitee.com/peacecdt/linux-env.git
-run_bootstrap https://github.com/cdtcontact/linux-env.git env LINUX_ENV_SOURCE=github
-run_bootstrap https://gitee.com/peacecdt/linux-env.git \
+run_bootstrap https://github.com/cdtcontact/linux-env.git github
+run_bootstrap https://gitee.com/peacecdt/linux-env.git gitee
+run_bootstrap https://gitee.com/peacecdt/linux-env.git github env LINUX_ENV_SOURCE=gitee
+run_bootstrap https://github.com/cdtcontact/linux-env.git gitee env LINUX_ENV_SOURCE=github
+run_bootstrap https://gitee.com/peacecdt/linux-env.git github \
     env LINUX_ENV_SOURCE=github bootstrap-with-source gitee
-run_bootstrap "file://$fixture" \
+run_bootstrap "file://$fixture" gitee \
     env LINUX_ENV_SOURCE=gitee LINUX_ENV_REPO_URL="file://$fixture" bootstrap-with-source github
 
-printf 'Standalone bootstrap passed: Gitee default, source precedence, exact revision, partial fetch, sparse checkout.\n'
+printf 'Standalone bootstrap passed: both platform defaults, source precedence, exact revision, partial fetch, sparse checkout.\n'

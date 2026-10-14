@@ -2,6 +2,9 @@
 # Standalone entry point: download this file, then run it with Bash as root.
 set -Eeuo pipefail
 
+# This one value is platform-specific; shared configuration stays identical.
+DEFAULT_SOURCE=github
+
 usage() {
   cat <<'HELP'
 Ubuntu C/C++ / Python 学习环境
@@ -10,13 +13,14 @@ Ubuntu C/C++ / Python 学习环境
 默认配置 sudo 调用者；直接 root 登录时配置 root。
 --skip-packages  依赖已安装时使用；不会安装缺失的软件包
 --skip-checks    跳过最后的编译和配置自检
-默认从 Gitee 获取配置；--source github 可切换 GitHub。
+入口默认使用其发布平台；--source 可手动切换来源。
 LINUX_ENV_SOURCE / LINUX_ENV_REPO_URL / LINUX_ENV_REF 可指定来源、自定义仓库与版本。
 HELP
+  printf '当前入口默认来源: %s\n' "$DEFAULT_SOURCE"
 }
 
 SKIP_PACKAGES=0
-SOURCE="${LINUX_ENV_SOURCE:-gitee}"
+SOURCE="${LINUX_ENV_SOURCE:-$DEFAULT_SOURCE}"
 args=()
 while (($#)); do
   case "$1" in
