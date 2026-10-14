@@ -1,0 +1,117 @@
+# linux-env: small, readable Zsh configuration; no plugin manager required.
+[[ -o interactive ]] || return
+
+export EDITOR=${EDITOR:-vim}
+export VISUAL=${VISUAL:-$EDITOR}
+export PAGER=${PAGER:-less}
+typeset -U path
+path=("$HOME/.local/bin" $path)
+
+HISTFILE="$HOME/.zsh_history"
+HISTSIZE=20000
+SAVEHIST=20000
+setopt append_history inc_append_history extended_history
+setopt hist_ignore_dups hist_ignore_space hist_reduce_blanks hist_verify
+setopt interactive_comments auto_cd complete_in_word
+unsetopt beep
+
+# Keep the normal Emacs bindings. Up/Down search history by typed prefix.
+bindkey -e
+bindkey '^[[A' history-beginning-search-backward
+bindkey '^[[B' history-beginning-search-forward
+bindkey '^[[H' beginning-of-line
+bindkey '^[[F' end-of-line
+bindkey '^[[3~' delete-char
+bindkey '^R' history-incremental-search-backward
+
+autoload -Uz compinit
+# A completion dump is executable shell code. Only cache under an owned,
+# non-writable-by-others directory, and check every ancestor and existing dump.
+# Never use compinit -u or -C: insecure completion directories stay excluded.
+_linux_env_secure_path() {
+    emulate -L zsh
+    local item=${1:a}
+    local -A info
+    zmodload zsh/stat 2>/dev/null || return 1
+    while true; do
+        [[ ! -L "$item" ]] || return 1
+        zstat -H info -- "$item" 2>/dev/null || return 1
+        (( (info[uid] == EUID || info[uid] == 0) && (info[mode] & 0022) == 0 )) || return 1
+        [[ "$item" == / ]] && return 0
+        item=${item:h}
+    done
+}
+_linux_env_init_completion() {
+    emulate -L zsh
+    local cache_root=${XDG_CACHE_HOME:-$HOME/.cache}
+    [[ "$cache_root" == /* ]] || cache_root="$HOME/.cache"
+    local cache="$cache_root/linux-env/zsh"
+    local dump="$cache/zcompdump-$ZSH_VERSION"
+    local saved_umask
+    if (umask 077; command mkdir -p -- "$cache") 2>/dev/null &&
+        [[ -O "$cache" && -w "$cache" ]] &&
+        _linux_env_secure_path "$cache" &&
+        { [[ ! -e "$dump" && ! -L "$dump" ]] ||
+          { [[ -f "$dump" ]] && _linux_env_secure_path "$dump"; }; }; then
+        saved_umask=$(umask)
+        umask 077
+        compinit -i -d "$dump"
+        umask "$saved_umask"
+    else
+        compinit -i -D
+    fi
+}
+_linux_env_init_completion
+unfunction _linux_env_secure_path _linux_env_init_completion
+zstyle ':completion:*' menu select
+zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}'
+zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
+
+alias ll='ls -alF --color=auto'
+alias la='ls -A --color=auto'
+alias ..='cd ..'
+
+# A branch name is data. Escape prompt formatting and remove control characters.
+# Detached HEADs display the short commit; no worktree scan on every prompt.
+typeset -g _linux_env_git_prompt=''
+_linux_env_update_prompt() {
+    emulate -L zsh
+    _linux_env_git_prompt=''
+    (( $+commands[git] )) || return 0
+    local branch
+    branch=$(command git symbolic-ref --quiet --short HEAD 2>/dev/null) ||
+        branch=$(command git rev-parse --short HEAD 2>/dev/null) || return 0
+    branch=${branch//[[:cntrl:]]/?}
+    branch=${branch//\%/%%}
+    _linux_env_git_prompt=" %F{yellow}($branch)%f"
+}
+autoload -Uz add-zsh-hook
+add-zsh-hook precmd _linux_env_update_prompt
+setopt prompt_subst
+PROMPT='%(!.%F{red}.%F{green})%n@%m%f:%F{blue}%~%f${_linux_env_git_prompt} %(?.%F{green}.%F{red})%#%f '
+
+if (( $+commands[rg] )); then
+    export FZF_DEFAULT_COMMAND='rg --files --hidden --glob "!.git" --glob "!.venv" --glob "!build"'
+    export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
+fi
+if (( $+commands[fzf] )); then
+    # Ubuntu 22.04+ apt packages; tolerate either packaged layout.
+    for _linux_env_fzf_dir in /usr/share/doc/fzf/examples /usr/share/fzf; do
+        if [[ -r "$_linux_env_fzf_dir/key-bindings.zsh" ]]; then
+            source "$_linux_env_fzf_dir/key-bindings.zsh"
+            [[ -r "$_linux_env_fzf_dir/completion.zsh" ]] && source "$_linux_env_fzf_dir/completion.zsh"
+            break
+        fi
+    done
+    unset _linux_env_fzf_dir
+fi
+
+[[ -r /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh ]] &&
+    source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
+
+# Put personal aliases and settings here; installers do not replace this file.
+[[ -r "$HOME/.zshrc.local" ]] && source "$HOME/.zshrc.local"
+
+# Syntax highlighting should be loaded after widgets and personal bindings.
+[[ -r /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]] &&
+    source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh

@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Copy a starter project without executing its contents.
+set -Eeuo pipefail
+if [[ ${1:-} == --help || ${1:-} == -h ]]; then
+  printf '用法: linux-env-new {c|cpp|python} [新项目目录]\n'
+  exit 0
+fi
+[[ $# -ge 1 && $# -le 2 ]] || { printf '用法: linux-env-new {c|cpp|python} [新项目目录]\n' >&2; exit 2; }
+case "$1" in c|cpp|python) ;; *) printf '支持的语言: c / cpp / python\n' >&2; exit 2 ;; esac
+SOURCE="/usr/local/share/linux-env/examples/$1"
+DEST="${2:-$PWD/hello-$1}"
+[[ -d "$SOURCE" ]] || { printf '找不到模板，请重新安装 linux-env。\n' >&2; exit 1; }
+[[ ! -e "$DEST" && ! -L "$DEST" ]] || { printf '目标已存在，未覆盖: %s\n' "$DEST" >&2; exit 1; }
+mkdir -p -- "$(dirname -- "$DEST")"
+# mkdir is exclusive, so two concurrent invocations cannot overwrite each other.
+mkdir -- "$DEST"
+cp -R -- "$SOURCE/." "$DEST/"
+if [[ -f /usr/local/share/linux-env/config/editorconfig ]]; then
+  install -m 644 /usr/local/share/linux-env/config/editorconfig "$DEST/.editorconfig"
+fi
+printf '项目已创建: %s\n请查看项目中的 README.md。\n' "$DEST"

@@ -1,0 +1,23 @@
+# Included before personal ~/.gitconfig settings, which take precedence.
+# Identity stays personal: set user.name and user.email yourself.
+[core]
+    editor = vim
+    whitespace = trailing-space,space-before-tab
+[color]
+    ui = auto
+[init]
+    defaultBranch = main
+[pull]
+    ff = only
+[fetch]
+    prune = true
+[push]
+    default = simple
+[diff]
+    algorithm = histogram
+[merge]
+    conflictStyle = diff3
+[alias]
+    st = status -sb
+    lg = log --graph --oneline --decorate -20
+    last = log -1 --stat

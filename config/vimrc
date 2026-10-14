@@ -1,0 +1,108 @@
+" linux-env: native Vim, usable offline, without a network plugin manager.
+set nocompatible
+set encoding=utf-8
+set nomodeline
+set noexrc
+" Keep archived ~/.vim plugins out of this profile without deleting them.
+" Opt-in personal runtime files belong under ~/.config/linux-env/vim instead.
+let s:personal_runtime = expand('~/.config/linux-env/vim')
+let &runtimepath = escape(s:personal_runtime, ',') . ','
+            \ . escape($VIMRUNTIME, ',') . ','
+            \ . escape(s:personal_runtime . '/after', ',')
+let &packpath = &runtimepath
+filetype plugin indent on
+syntax enable
+
+set number
+set ruler
+set showcmd
+set laststatus=2
+set signcolumn=yes
+set hidden
+set mouse=a
+set backspace=indent,eol,start
+set expandtab
+set tabstop=4
+set softtabstop=4
+set shiftwidth=4
+set autoindent
+set smartcase
+set ignorecase
+set incsearch
+set hlsearch
+set wildmenu
+set wildmode=longest:full,full
+set wildignore+=*/.git/*,*/.venv/*,*/build/*,*.o,*.pyc
+set splitright
+set splitbelow
+set scrolloff=5
+set updatetime=300
+set showmode
+set statusline=%f\ %h%m%r%=%{&filetype}\ %l:%c\ %p%%
+" Use normal project tags, searching upward; do not index /usr/include at startup.
+set tags=./tags;,tags
+set path=.,/usr/local/include,/usr/include
+
+let mapleader = ' '
+nnoremap <leader>w :write<CR>
+nnoremap <leader>b :make<CR>
+nnoremap <leader>q :copen<CR>
+nnoremap <leader>e :Lexplore<CR>
+nnoremap <leader>n :nohlsearch<CR>
+nnoremap ]q :cnext<CR>
+nnoremap [q :cprevious<CR>
+
+let g:netrw_banner = 0
+let g:netrw_liststyle = 3
+let g:netrw_winsize = 25
+
+if executable('rg')
+    set grepprg=rg\ --vimgrep\ --smart-case\ --
+    set grepformat=%f:%l:%c:%m
+endif
+
+" :make on Python checks syntax. It does not execute the edited program.
+" Resolve an interpreter only when explicitly running :make, so a newly created
+" .venv also works. shellescape(..., 1) protects shell and Vim special characters.
+function! s:PythonMake() abort
+    let l:directory = expand('%:p:h')
+    let l:python = ''
+    while !empty(l:directory)
+        let l:candidate = l:directory . '/.venv/bin/python'
+        if executable(l:candidate)
+            let l:python = l:candidate
+            break
+        endif
+        let l:parent = fnamemodify(l:directory, ':h')
+        if l:parent ==# l:directory
+            break
+        endif
+        let l:directory = l:parent
+    endwhile
+    if empty(l:python) && !empty($VIRTUAL_ENV) && executable($VIRTUAL_ENV . '/bin/python')
+        let l:python = $VIRTUAL_ENV . '/bin/python'
+    endif
+    if empty(l:python)
+        let l:python = exepath('python3')
+    endif
+    if empty(l:python)
+        let l:python = 'python3'
+    endif
+    let &l:makeprg = shellescape(l:python, 1) . ' -m py_compile %:S'
+    let &l:errorformat = '%A  File "%f"\, line %l%.%#,%C    %.%#,%Z%m'
+endfunction
+
+augroup linux_env
+    autocmd!
+    autocmd FileType c,cpp setlocal suffixesadd=.h,.hpp,.hh,.hxx
+    autocmd FileType c,cpp setlocal makeprg=cmake\ --build\ build
+    autocmd FileType python call <SID>PythonMake()
+    autocmd QuickFixCmdPre make if &filetype ==# 'python' | call <SID>PythonMake() | endif
+    autocmd FileType sh,yaml,json setlocal shiftwidth=2 softtabstop=2
+    autocmd FileType make setlocal noexpandtab
+augroup END
+
+" Personal settings are loaded only from this explicit file in your home.
+if filereadable(expand('~/.vimrc.local'))
+    execute 'source ' . fnameescape(expand('~/.vimrc.local'))
+endif

@@ -1,0 +1,32 @@
+cmake_minimum_required(VERSION 3.16)
+project(hello_cpp VERSION 0.1.0 LANGUAGES CXX)
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+option(LEARNING_ENABLE_SANITIZERS "Enable AddressSanitizer and UBSan" OFF)
+
+add_library(learning src/greeting.cpp)
+target_include_directories(learning PUBLIC include)
+target_compile_features(learning PUBLIC cxx_std_17)
+set_target_properties(learning PROPERTIES CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
+
+add_executable(hello_cpp src/main.cpp)
+target_link_libraries(hello_cpp PRIVATE learning)
+set_target_properties(hello_cpp PROPERTIES CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
+
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(test_greeting tests/test_greeting.cpp)
+    target_link_libraries(test_greeting PRIVATE learning)
+    set_target_properties(test_greeting PROPERTIES CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
+    add_test(NAME greeting COMMAND test_greeting)
+endif()
+
+foreach(target learning hello_cpp test_greeting)
+    if(TARGET ${target} AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic)
+        if(LEARNING_ENABLE_SANITIZERS)
+            target_compile_options(${target} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(${target} PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+endforeach()

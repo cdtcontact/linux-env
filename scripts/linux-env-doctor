@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Compile and run tiny programs in a disposable directory, as the current user.
+set -Eeuo pipefail
+export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin"
+if [[ ${1:-} == --help || ${1:-} == -h ]]; then
+  printf '用法: linux-env-doctor\n检查开发工具、C/C++编译、Python venv，以及 Vim/Zsh 配置。\n'
+  exit 0
+fi
+[[ $# -eq 0 ]] || { printf '未知参数。使用 --help 查看帮助。\n' >&2; exit 2; }
+WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/linux-env-doctor.XXXXXXXX")"
+trap 'rm -rf -- "$WORK_DIR"' EXIT
+trap 'printf "[FAIL] 自检失败（第 %s 行）；请查看上方错误。\n" "$LINENO" >&2' ERR
+for cmd in gcc g++ clang clangd clang-format clang-tidy cmake ninja gdb pkg-config python3 pipx git zsh vim tmux rg fzf ctags shellcheck; do
+  command -v "$cmd" >/dev/null || { printf '[FAIL] 缺少命令: %s\n' "$cmd" >&2; exit 1; }
+done
+printf '#include <stdio.h>\nint main(void) { puts("C OK"); return 0; }\n' > "$WORK_DIR/main.c"
+gcc -std=c17 -Wall -Wextra -Werror "$WORK_DIR/main.c" -o "$WORK_DIR/hello-c"
+"$WORK_DIR/hello-c"
+printf '#include <iostream>\nint main() { std::cout << "C++ OK\\n"; }\n' > "$WORK_DIR/main.cpp"
+g++ -std=c++17 -Wall -Wextra -Werror "$WORK_DIR/main.cpp" -o "$WORK_DIR/hello-cpp"
+"$WORK_DIR/hello-cpp"
+python3 -m venv "$WORK_DIR/venv"
+"$WORK_DIR/venv/bin/python" -c 'import ssl, sqlite3, venv; print("Python venv OK")'
+"$WORK_DIR/venv/bin/python" -m pip --version
+zsh -n "$HOME/.zshrc"
+TERM=xterm-256color zsh -ic 'print -r -- "Zsh OK"'
+vim -Nu "$HOME/.vimrc" -i NONE -n -es +'qall!'
+printf '[OK] C/C++、Python venv、Zsh、Vim 自检通过。\n'

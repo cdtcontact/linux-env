@@ -1,0 +1,32 @@
+cmake_minimum_required(VERSION 3.16)
+project(hello_c VERSION 0.1.0 LANGUAGES C)
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+option(LEARNING_ENABLE_SANITIZERS "Enable AddressSanitizer and UBSan" OFF)
+
+add_library(learning src/learning.c)
+target_include_directories(learning PUBLIC include)
+target_compile_features(learning PUBLIC c_std_17)
+set_target_properties(learning PROPERTIES C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+
+add_executable(hello_c src/main.c)
+target_link_libraries(hello_c PRIVATE learning)
+set_target_properties(hello_c PROPERTIES C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(test_learning tests/test_learning.c)
+    target_link_libraries(test_learning PRIVATE learning)
+    set_target_properties(test_learning PROPERTIES C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+    add_test(NAME maximum COMMAND test_learning)
+endif()
+
+foreach(target learning hello_c test_learning)
+    if(TARGET ${target} AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic)
+        if(LEARNING_ENABLE_SANITIZERS)
+            target_compile_options(${target} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(${target} PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+endforeach()
