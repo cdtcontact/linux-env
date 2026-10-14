@@ -12,7 +12,7 @@ repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 
 note() { printf '\n[test] %s\n' "$*"; }
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
-as_learner() { runuser -u learner -- env HOME=/home/learner "$@"; }
+as_learner() { runuser -u learner -- env HOME=/home/learner TERM=xterm-256color "$@"; }
 expect_failure() {
     if "$@"; then
         fail "Command unexpectedly succeeded: $*"
@@ -91,7 +91,11 @@ as_learner zsh -ic '
     print -r -- "fzf widget handler=${widgets[fzf-file-widget]-missing}"
     (( ${+functions[_zsh_autosuggest_start]} && ${+functions[_zsh_highlight]} && ${+widgets[fzf-file-widget]} ))
 '
-as_learner vim -i NONE -n -es -c 'qa!'
+vim_log=$(mktemp /tmp/linux-env-vim-test.XXXXXXXX)
+chown learner:learner "$vim_log"
+# -es intentionally skips user vimrc unless -u is supplied. Use normal Ex mode
+# here to exercise default vimrc discovery and legacy-plugin isolation together.
+as_learner vim -V1"$vim_log" -i NONE -n -e -c 'qa!' </dev/null || { cat "$vim_log"; fail 'Normal Vim startup failed'; }
 
 note 'Generate and execute C, C++, and isolated Python starter projects'
 project_dir=$(mktemp -d /tmp/linux-env-projects.XXXXXX)
