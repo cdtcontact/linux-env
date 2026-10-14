@@ -149,7 +149,7 @@ def test_sudo(root, asynchronous):
         "  zle -R\n"
         "}\n"
         "zle -N linux-env-test-inject\n"
-        "bindkey '^X' linux-env-test-inject\n"
+        "bindkey '^T' linux-env-test-inject\n"
         "linux-env-test-snapshot() {\n"
         "  print -r -- \"$BUFFER\" \"$POSTDISPLAY\" > " + shlex.quote(str(snapshot_file)) + "\n"
         "  zle -I\n"
@@ -170,7 +170,7 @@ def test_sudo(root, asynchronous):
             os.write(terminal.fd, b"sudo -i")
             settle(terminal)
             if inject:
-                os.write(terminal.fd, b"\x18")
+                os.write(terminal.fd, b"\x14")
                 settle(terminal, 0.2)
             os.write(terminal.fd, b"\x07")
             terminal.expect(b"SNAPSHOT-DONE")
@@ -187,7 +187,7 @@ def test_sudo(root, asynchronous):
             os.write(terminal.fd, keys)
             settle(terminal)
             if inject:
-                os.write(terminal.fd, b"\x18")
+                os.write(terminal.fd, b"\x14")
                 settle(terminal, 0.2)
                 before_enter = bytes(terminal.output[start:])
                 before_lines = rendered(before_enter)

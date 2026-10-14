@@ -111,7 +111,7 @@ def test_live_suggestions(root):
         '  esac\n'
         '}\n'
         'zle -N linux-env-test-stale\n'
-        "bindkey '^X' linux-env-test-stale\n"
+        "bindkey '^T' linux-env-test-stale\n"
         'linux-env-test-capture() {\n'
         '  print -r -- "${BUFFER}${POSTDISPLAY}" > ' + str(record) + '\n'
         '  zle -I\n'
@@ -132,7 +132,7 @@ def test_live_suggestions(root):
             while time.monotonic() < until:
                 terminal.pump()
             if inject:
-                os.write(terminal.fd, b"\x18")
+                os.write(terminal.fd, b"\x14")
                 until = time.monotonic() + 0.2
                 while time.monotonic() < until:
                     terminal.pump()
