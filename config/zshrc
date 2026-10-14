@@ -133,6 +133,9 @@ _linux_env_current_word_suggestion() {
     proposed_words=("${(@z)proposed}")
     (( ${#input_words} && ${#proposed_words} >= ${#input_words} )) || return 1
     raw=${input_words[-1]}
+    # Options are explicit: never suggest turning -i into -iA (or extend flags
+    # of any other command). Tab completion remains available on demand.
+    [[ "$raw" != -* ]] || return 1
     # An outside space starts a new argument. Do not invent one automatically.
     [[ "$input" == *"$raw" ]] || return 1
     command=${(Q)input_words[1]}
@@ -162,7 +165,7 @@ _zsh_autosuggest_strategy_linux_env_completion() {
     if [[ "$first" == ./* || "$first" == ../* ]] && [[ -f "$first" && -x "$first" ]]; then
         return 0
     fi
-    [[ -n "$last" && -f "$last" ]] && return 0
+    [[ "$last" == -* || ( -n "$last" && -f "$last" ) ]] && return 0
     # Command-position completion differs from argument completion across Zsh
     # versions. For simple relative programs, use live executable files directly.
     if [[ "$1" == ./* || "$1" == ../* ]] && _linux_env_simple_path "$1"; then
@@ -202,6 +205,13 @@ add-zle-hook-widget line-pre-redraw _linux_env_filter_suggestion
 _linux_env_simple_path() {
     [[ -n "$1" && "$1" != *[^[:alnum:]_./~+-]* && "$1" != -* ]]
 }
+_linux_env_finish_line() {
+    # Our custom Enter widget is excluded from the plugin's automatic wrappers.
+    # Remove any unaccepted gray text and repaint before committing the line.
+    POSTDISPLAY=''
+    zle -R
+    zle .accept-line
+}
 _linux_env_accept_line() {
     emulate -L zsh
     local prefix candidate typed word REPLY
@@ -220,7 +230,7 @@ _linux_env_accept_line() {
                     if [[ "$candidate" == "$prefix"* && -f "$candidate" ]]; then
                         BUFFER="vim ${(q)candidate}"
                         POSTDISPLAY=''
-                        zle .accept-line
+                        _linux_env_finish_line
                         return
                     fi
                 fi
@@ -250,7 +260,7 @@ _linux_env_accept_line() {
             # paths and shell expressions retain normal Enter and Tab behavior.
             for word in "${words[@]}"; do
                 if [[ -z "$word" || "$word" == *[^[:alnum:]_./~+=-]* ]]; then
-                    zle .accept-line
+                    _linux_env_finish_line
                     return
                 fi
             done
@@ -260,7 +270,7 @@ _linux_env_accept_line() {
             fi
         fi
     fi
-    zle .accept-line
+    _linux_env_finish_line
 }
 zle -N _linux_env_accept_line
 bindkey '^M' _linux_env_accept_line
