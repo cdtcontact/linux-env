@@ -130,7 +130,8 @@ def test_live_suggestions(root):
             require(visible == prefix, "Deleted/missing file reappeared: " + visible)
         require(snapshot("rm keep") == "rm keep.c", "Other live files stopped completing")
         require(snapshot("gcc keep.c") == "gcc keep.c", "Complete compiler input acquired another filename")
-        require(snapshot("./a.o") == "./a.out", "Executable name was not suggested")
+        visible = snapshot("./a.o")
+        require(visible == "./a.out", "Executable name was not suggested: " + repr(visible))
         for prefix in ("./a.out", "./a.out ", "./a.out 10."):
             require(snapshot(prefix) == prefix.rstrip(), "Unsolicited program argument was suggested")
         program.unlink()

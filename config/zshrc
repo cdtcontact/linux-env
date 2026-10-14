@@ -118,13 +118,24 @@ ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=245'
 # local executable must not acquire an unsolicited filename argument.
 _zsh_autosuggest_strategy_linux_env_completion() {
     emulate -L zsh
-    unset suggestion
+    typeset -g suggestion=''
     local first=${1%%[[:space:]]*}
     local last=${1##*[[:space:]]}
+    local candidate
     if [[ "$first" == ./* || "$first" == ../* ]] && [[ -f "$first" && -x "$first" ]]; then
         return 0
     fi
     [[ -n "$last" && -f "$last" ]] && return 0
+    # Command-position completion differs from argument completion across Zsh
+    # versions. For simple relative programs, use live executable files directly.
+    if [[ "$1" == ./* || "$1" == ../* ]] && _linux_env_simple_path "$1"; then
+        for candidate in "$1"*(N-.); do
+            if [[ -x "$candidate" ]]; then
+                suggestion=$candidate
+                return 0
+            fi
+        done
+    fi
     _zsh_autosuggest_strategy_completion "$1"
 }
 
