@@ -46,7 +46,7 @@ jobs:
             scripts
             tests
             .github
-      - name: Full install, reinstall, user settings, and language projects
+      - name: Full install, reinstall, source selection, and language projects
         env:
           UBUNTU_VERSION: ${{ matrix.ubuntu }}
         run: |

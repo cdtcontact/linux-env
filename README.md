@@ -16,9 +16,21 @@ apt upgrade -y
 apt autoremove -y
 apt install wget ca-certificates -y
 
-wget -O init_env.sh https://raw.githubusercontent.com/cdtcontact/linux-env/main/init_env.sh
+wget -O init_env.sh https://raw.giteeusercontent.com/peacecdt/linux-env/raw/main/init_env.sh
 bash init_env.sh
 ```
+
+如上面的 Gitee 文件地址无法访问，可换用以下任一下载入口，再执行 `bash init_env.sh`：
+
+```bash
+# Gitee 备用入口
+wget -O init_env.sh https://gitee.com/peacecdt/linux-env/raw/main/init_env.sh
+
+# GitHub 备用入口
+wget -O init_env.sh https://raw.githubusercontent.com/cdtcontact/linux-env/main/init_env.sh
+```
+
+**默认从 Gitee 获取后续配置**，即使入口脚本从 GitHub 下载也是如此。安装器使用公开 HTTPS，不需要 Git 平台账号或 SSH 密钥；软件包仍从机器现有的 Ubuntu APT 源安装，不自动更换系统软件源或 pip 镜像。
 
 安装器默认配置有效的 `SUDO_USER` 对应账号；没有该变量时配置 root。通过 `sudo -i` 进入 root 后，如需确保配置到已有普通用户，请明确指定用户名，例如：
 
@@ -117,12 +129,24 @@ bash init_env.sh --user alice --skip-packages
 bash init_env.sh --user alice --skip-checks
 ```
 
-默认从本仓库的 `main` 下载配置。可以选择分支、标签或提交，也可以使用自己的 fork：
+默认从 [Gitee 仓库](https://gitee.com/peacecdt/linux-env) 的 `main` 下载配置；也可选择 [GitHub 仓库](https://github.com/cdtcontact/linux-env)、固定版本或自己的 fork：
 
 ```bash
+# 显式选择下载源
+bash init_env.sh --source gitee
+bash init_env.sh --source github
+
+# 用环境变量选择；--source 参数会覆盖此变量
+LINUX_ENV_SOURCE=github bash init_env.sh
+
+# 默认 main，也可指定分支、标签或提交 SHA
 LINUX_ENV_REF="<分支、标签或提交>" bash init_env.sh
-LINUX_ENV_REPO_URL=https://github.com/你的账号/linux-env.git bash init_env.sh
+
+# 自定义仓库 URL 优先级最高，覆盖 --source 和 LINUX_ENV_SOURCE 的仓库选择
+LINUX_ENV_REPO_URL=https://gitee.com/你的账号/linux-env.git bash init_env.sh
 ```
+
+`LINUX_ENV_SOURCE` 默认为 `gitee`，只接受 `gitee` 或 `github`；命令行 `--source` 同样只接受这两个值。自定义仓库仍使用 `LINUX_ENV_REF` 指定版本。
 
 固定版本时，请同时从该版本下载 `init_env.sh`，再将 `LINUX_ENV_REF` 设为同一版本。已克隆仓库可直接运行根目录的 `bash init_env.sh`，使用本地配置。
 
@@ -132,6 +156,7 @@ LINUX_ENV_REPO_URL=https://github.com/你的账号/linux-env.git bash init_env.s
 - `config/`：当前维护的终端与编辑器配置。
 - `scripts/`：安装、自检与项目模板命令；旧配置收集脚本仍保留供追溯。
 - `examples/`：C、C++、Python 学习模板。
-- `archive/legacy/`、旧 `payload/`：历史配置归档，当前安装流程不执行、不部署，也不下载其大型插件内容。
+- `archive/legacy/`、旧 `payload/`：历史配置归档，其中保留的上游 GitHub 链接不属于当前安装的网络依赖；安装流程不执行、不部署，也不下载其大型插件内容。
+- `.github/`：GitHub Actions 持续集成配置，安装器不使用。
 
 网络或 APT 操作失败后，可修复网络或软件源并重跑同一命令。系统包和插件的版本跟随 Ubuntu 软件源；脚本声明支持的系统版本不代表所有版本都已完成真实机器验证。

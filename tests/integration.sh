@@ -52,9 +52,12 @@ as_learner bash "$repo_root/init_env.sh" --help
 as_learner bash "$repo_root/scripts/install.sh" --help
 expect_failure bash "$repo_root/init_env.sh" --user linux-env-missing-test-user --skip-packages
 expect_failure bash "$repo_root/init_env.sh" --invalid-linux-env-test-option
+expect_failure bash "$repo_root/init_env.sh" --source
+expect_failure bash "$repo_root/init_env.sh" --source unsupported
+expect_failure env LINUX_ENV_SOURCE=unsupported bash "$repo_root/init_env.sh" --skip-packages
 
 note 'Install through a real sudo -i session and detect the original user'
-as_learner sudo -i bash "$repo_root/init_env.sh" --no-change-shell
+as_learner sudo -i bash "$repo_root/init_env.sh" --source github --no-change-shell
 [[ -f /home/learner/.config/linux-env/gitconfig ]] || fail 'sudo -i did not configure the invoking user'
 [[ $(getent passwd learner | cut -d: -f7) == /bin/bash ]] || fail '--no-change-shell changed the login shell'
 [[ $(as_learner git config --global --includes user.name) == 'Existing Learner' ]] || fail 'Git user.name was lost'

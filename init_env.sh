@@ -5,27 +5,35 @@ set -Eeuo pipefail
 usage() {
   cat <<'HELP'
 Ubuntu C/C++ / Python 学习环境
-用法: bash init_env.sh [--user 已有用户名] [--no-change-shell]
+用法: bash init_env.sh [--source gitee|github] [--user 已有用户名] [--no-change-shell]
                         [--skip-packages] [--skip-checks] [--help]
 默认配置 sudo 调用者；直接 root 登录时配置 root。
 --skip-packages  依赖已安装时使用；不会安装缺失的软件包
 --skip-checks    跳过最后的编译和配置自检
-LINUX_ENV_REPO_URL / LINUX_ENV_REF 可指定仓库与分支、标签或提交。
+默认从 Gitee 获取配置；--source github 可切换 GitHub。
+LINUX_ENV_SOURCE / LINUX_ENV_REPO_URL / LINUX_ENV_REF 可指定来源、自定义仓库与版本。
 HELP
 }
 
 SKIP_PACKAGES=0
-args=("$@")
+SOURCE="${LINUX_ENV_SOURCE:-gitee}"
+args=()
 while (($#)); do
   case "$1" in
     --help|-h) usage; exit 0 ;;
-    --user) [[ $# -ge 2 && "$2" != -* ]] || { usage >&2; exit 2; }; shift ;;
-    --skip-packages) SKIP_PACKAGES=1 ;;
-    --no-change-shell|--skip-checks) ;;
+    --source) [[ $# -ge 2 && "$2" != -* ]] || { usage >&2; exit 2; }; SOURCE="$2"; shift ;;
+    --user) [[ $# -ge 2 && "$2" != -* ]] || { usage >&2; exit 2; }; args+=("$1" "$2"); shift ;;
+    --skip-packages) SKIP_PACKAGES=1; args+=("$1") ;;
+    --no-change-shell|--skip-checks) args+=("$1") ;;
     *) printf '未知参数: %s\n' "$1" >&2; usage >&2; exit 2 ;;
   esac
   shift
 done
+case "$SOURCE" in
+  gitee) DEFAULT_REPO_URL=https://gitee.com/peacecdt/linux-env.git ;;
+  github) DEFAULT_REPO_URL=https://github.com/cdtcontact/linux-env.git ;;
+  *) printf '来源不合法: %s；可用 gitee / github。\n' "$SOURCE" >&2; exit 2 ;;
+esac
 
 [[ $EUID -eq 0 ]] || { printf '请使用 sudo -i 后运行此脚本。\n' >&2; exit 1; }
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -50,7 +58,7 @@ if (( ! SKIP_PACKAGES )); then
 fi
 command -v git >/dev/null || { printf '需要 git；请安装它或去掉 --skip-packages。\n' >&2; exit 1; }
 
-REPO_URL="${LINUX_ENV_REPO_URL:-https://github.com/cdtcontact/linux-env.git}"
+REPO_URL="${LINUX_ENV_REPO_URL:-$DEFAULT_REPO_URL}"
 REF="${LINUX_ENV_REF:-main}"
 [[ -n "$REF" && "$REF" != -* ]] || { printf 'LINUX_ENV_REF 不合法。\n' >&2; exit 2; }
 WORK_DIR="$(mktemp -d /tmp/linux-env.XXXXXXXX)"
