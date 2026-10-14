@@ -59,7 +59,8 @@ log "日志: $LOG_FILE"
 
 if (( ! SKIP_PACKAGES )); then
   export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a
-  apt_options=(-o DPkg::Lock::Timeout=180 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
+  apt_options=(-o DPkg::Lock::Timeout=180 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold
+    -o 'Dpkg::Options::=--path-include=/usr/share/doc/fzf/*')
   apt-get "${apt_options[@]}" update
   # Some cloud images disable universe, which contains useful development tools.
   if ! apt-cache show zsh-autosuggestions >/dev/null 2>&1; then
@@ -76,6 +77,12 @@ if (( ! SKIP_PACKAGES )); then
     zsh-autosuggestions zsh-syntax-highlighting
   )
   apt-get "${apt_options[@]}" install -y --no-install-recommends "${packages[@]}"
+  # Minimal cloud/container images often exclude /usr/share/doc via dpkg.
+  # Ubuntu stores executable fzf Zsh integration there, so preserve these files
+  # for this apt invocation only. Also repair an already-installed stripped fzf.
+  if [[ ! -r /usr/share/doc/fzf/examples/key-bindings.zsh && ! -r /usr/share/fzf/key-bindings.zsh ]]; then
+    apt-get "${apt_options[@]}" install -y --no-install-recommends --reinstall fzf
+  fi
   if [[ $(apt-cache policy valgrind) == *'Candidate: (none)'* ]] || ! apt-cache show valgrind >/dev/null 2>&1; then
     log '当前架构/软件源无 valgrind；跳过此可选工具。'
   else
