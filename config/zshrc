@@ -106,7 +106,10 @@ if (( $+commands[fzf] )); then
     unset _linux_env_fzf_dir
 fi
 
-ZSH_AUTOSUGGEST_STRATEGY=(history completion)
+# Complete against the current command and filesystem on every edit. History
+# suggestions can resurrect deleted filenames (or files from another directory).
+# Keep history available through Up/Down and Ctrl+R, outside the gray suggestions.
+ZSH_AUTOSUGGEST_STRATEGY=(completion)
 ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=245'
 [[ -r /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh ]] &&
     source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
