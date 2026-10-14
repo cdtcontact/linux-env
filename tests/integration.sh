@@ -81,8 +81,16 @@ note 'Doctor, Vim, and interactive Zsh must work as the ordinary user'
 as_learner /usr/local/bin/linux-env-doctor
 as_learner zsh -n /home/learner/.zshrc
 as_learner zsh -ic 'command -v gcc; command -v python3; exit'
+# zsh -ic does not run precmd hooks; do not depend on a plugin loading the
+# optional introspection module on our behalf before querying its widgets hash.
 # shellcheck disable=SC2016 # Function/widget parameters belong to the child Zsh.
-as_learner zsh -ic '(( $+functions[_zsh_autosuggest_start] && $+functions[_zsh_highlight] && $+widgets[fzf-file-widget] ))'
+as_learner zsh -ic '
+    zmodload zsh/zleparameter || exit 1
+    print -r -- "interactive=${options[interactive]} zle=${options[zle]}"
+    print -r -- "autosuggestions=${+functions[_zsh_autosuggest_start]} highlighting=${+functions[_zsh_highlight]} fzf-function=${+functions[fzf-file-widget]} fzf-widget=${+widgets[fzf-file-widget]}"
+    print -r -- "fzf widget handler=${widgets[fzf-file-widget]-missing}"
+    (( ${+functions[_zsh_autosuggest_start]} && ${+functions[_zsh_highlight]} && ${+widgets[fzf-file-widget]} ))
+'
 as_learner vim -i NONE -n -es -c 'qa!'
 
 note 'Generate and execute C, C++, and isolated Python starter projects'

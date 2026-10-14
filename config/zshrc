@@ -1,5 +1,5 @@
 # linux-env: small, readable Zsh configuration; no plugin manager required.
-[[ -o interactive ]] || return
+[[ -o interactive ]] || return 0
 
 export EDITOR=${EDITOR:-vim}
 export VISUAL=${VISUAL:-$EDITOR}
@@ -113,5 +113,6 @@ fi
 [[ -r "$HOME/.zshrc.local" ]] && source "$HOME/.zshrc.local"
 
 # Syntax highlighting should be loaded after widgets and personal bindings.
-[[ -r /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]] &&
+if [[ -r /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]]; then
     source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+fi
