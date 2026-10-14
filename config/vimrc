@@ -61,6 +61,108 @@ if executable('rg')
     set grepformat=%f:%l:%c:%m
 endif
 
+" Native insert-mode pairs for every filetype; no downloaded plugin required.
+let g:linux_env_auto_pairs = get(g:, 'linux_env_auto_pairs', 1)
+let s:pairs = {'(': ')', '[': ']', '{': '}', '"': '"', "'": "'", '`': '`'}
+function! s:PairsEnabled() abort
+    return g:linux_env_auto_pairs && !&paste && &buftype ==# ''
+endfunction
+
+function! s:PairEscaped() abort
+    let l:before = strpart(getline('.'), 0, col('.') - 1)
+    return strlen(matchstr(l:before, '\\\+$')) % 2
+endfunction
+
+function! s:PairInString() abort
+    " Syntax highlighting may lag behind fast typing or macros. Scan the current
+    " line as well, so a single quote inside a double-quoted string stays literal.
+    let l:before = strpart(getline('.'), 0, col('.') - 1)
+    let l:quote = ''
+    let l:escaped = 0
+    for l:char in split(l:before, '\zs')
+        if l:escaped
+            let l:escaped = 0
+        elseif l:char ==# '\'
+            let l:escaped = 1
+        elseif empty(l:quote) && index(['"', "'", '`'], l:char) >= 0
+            let l:quote = l:char
+        elseif l:char ==# l:quote
+            let l:quote = ''
+        endif
+    endfor
+    if !empty(l:quote)
+        return 1
+    endif
+    " Also recognize multiline strings when the filetype supplies syntax rules.
+    return col('.') > 1 && l:before !~# '["''`]$'
+                \ && synIDattr(synID(line('.'), col('.') - 1, 1), 'name') =~? 'string\|character'
+endfunction
+
+function! s:PairOpen(key) abort
+    if !s:PairsEnabled() || s:PairEscaped()
+        return a:key
+    endif
+    let l:before = strpart(getline('.'), 0, col('.') - 1)
+    let l:next = strpart(getline('.'), col('.') - 1, 1)
+    if index(['"', "'", '`'], a:key) >= 0
+        if l:next ==# a:key
+            return "\<Right>"
+        endif
+        " After two typed quotes, the third opens a Python triple-quoted string.
+        if &filetype ==# 'python' && a:key !=# '`' && l:before =~# escape(repeat(a:key, 2), '\') . '$'
+            return repeat(a:key, 4) . "\<Left>\<Left>\<Left>"
+        endif
+        " A quote within another string, or an apostrophe within a word, is literal.
+        if s:PairInString() || (l:before =~# '\k$' && l:next =~# '\k')
+            return a:key
+        endif
+    endif
+    return a:key . s:pairs[a:key] . "\<Left>"
+endfunction
+
+function! s:PairClose(key) abort
+    if s:PairsEnabled() && !s:PairEscaped() && strpart(getline('.'), col('.') - 1, 1) ==# a:key
+        return "\<Right>"
+    endif
+    return a:key
+endfunction
+
+function! s:PairBackspace() abort
+    let l:before = strpart(getline('.'), 0, col('.') - 1)
+    let l:previous = strcharpart(l:before, strchars(l:before) - 1, 1)
+    let l:next = strpart(getline('.'), col('.') - 1, 1)
+    if s:PairsEnabled() && has_key(s:pairs, l:previous) && s:pairs[l:previous] ==# l:next
+                \ && strlen(matchstr(strpart(l:before, 0, strlen(l:before) - 1), '\\\+$')) % 2 == 0
+        return "\<BS>\<Del>"
+    endif
+    return "\<BS>"
+endfunction
+
+function! s:PairEnter() abort
+    let l:previous = strpart(getline('.'), col('.') - 2, 1)
+    let l:next = strpart(getline('.'), col('.') - 1, 1)
+    if s:PairsEnabled() && !pumvisible() && !s:PairInString()
+                \ && index(['(', '[', '{'], l:previous) >= 0 && s:pairs[l:previous] ==# l:next
+        " Use the language's indentation rules; plain text gets one extra level.
+        let l:indent = empty(&indentexpr) && !&cindent && !&smartindent ? "\<C-t>" : ''
+        return "\<CR>\<C-o>O" . l:indent
+    endif
+    return "\<CR>"
+endfunction
+
+" Evaluate after pending text is inserted, including fast typing and macros.
+inoremap <silent> ( <C-r>=<SID>PairOpen('(')<CR>
+inoremap <silent> [ <C-r>=<SID>PairOpen('[')<CR>
+inoremap <silent> { <C-r>=<SID>PairOpen('{')<CR>
+inoremap <silent> " <C-r>=<SID>PairOpen('"')<CR>
+inoremap <silent> ' <C-r>=<SID>PairOpen("'")<CR>
+inoremap <silent> ` <C-r>=<SID>PairOpen('`')<CR>
+inoremap <silent> ) <C-r>=<SID>PairClose(')')<CR>
+inoremap <silent> ] <C-r>=<SID>PairClose(']')<CR>
+inoremap <silent> } <C-r>=<SID>PairClose('}')<CR>
+inoremap <silent> <BS> <C-r>=<SID>PairBackspace()<CR>
+inoremap <silent><expr> <CR> <SID>PairEnter()
+
 " Insert a header only for a new file. Existing files are never rewritten.
 let g:linux_env_author = get(g:, 'linux_env_author', 'chendatao')
 let g:linux_env_email = get(g:, 'linux_env_email', 'peacecdt@gmail.com')

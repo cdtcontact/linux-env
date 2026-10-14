@@ -140,6 +140,8 @@ def main():
     with tempfile.TemporaryDirectory(prefix="linux-env-editor-") as directory:
         root = Path(directory)
         test_vim(root)
+        run("vim", "-Nu", str(REPO / "config/vimrc"), "-i", "NONE", "-n", "-es",
+            "-S", str(REPO / "tests/vim-pairs.vim"))
         test_shell(root, b"vim uni\r", "unique.c", ["unique.c"])
         test_shell(root, b"vim uni\t\r", "unique.cpp", ["unique.cpp"])
         test_shell(root, b"vim exact.c\r", "exact.c", ["exact.c", "exact.cpp"])
@@ -149,7 +151,7 @@ def main():
         test_shell(root, b"vim bet", "beta.c", ["beta.c", "beta.cpp"], "vim beta-old.cpp\n")
         test_shell(root, b"vim other.py\r", "other.py", ["other.py"])
         test_live_suggestions(root)
-    print("Vim headers, real Zsh Tab/Enter, and live filename suggestion checks passed.")
+    print("Vim headers and auto pairs, real Zsh Tab/Enter, and live filename suggestion checks passed.")
 
 
 if __name__ == "__main__":
