@@ -130,6 +130,8 @@ _linux_env_accept_line() {
             [[ "$prefix" == '~/'* ]] && prefix="$HOME/${prefix#\~/}"
             if [[ ! -e "$prefix" ]]; then
                 candidate="${typed}${POSTDISPLAY}"
+                # Completion can append a separating space after a full name.
+                candidate=${candidate% }
                 if _linux_env_simple_vim_argument "$candidate"; then
                     [[ "$candidate" == '~/'* ]] && candidate="$HOME/${candidate#\~/}"
                     if [[ "$candidate" == "$prefix"* && -f "$candidate" ]]; then
