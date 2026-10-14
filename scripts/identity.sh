@@ -14,7 +14,7 @@ select_identity() {
   NEW_HOSTNAME=''
   CREATE_USER=0
   RESET_PASSWORD=0
-  current_hostname="$(hostname)"
+  current_hostname="$(cat /proc/sys/kernel/hostname)"
   printf '\n[linux-env] 设置主机名和开发账号（已有文件与账号会保留）。\n' >&"$TTY_FD"
   while true; do
     read_identity_answer "请输入主机名（纯英文字母，回车保留 $current_hostname）：" answer
