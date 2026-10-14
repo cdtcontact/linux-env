@@ -135,4 +135,7 @@ bash "$repo_root/init_env.sh" --user root --skip-packages --skip-checks --no-cha
 
 note 'Exercise standalone bootstrap against the exact tested source revision'
 bash "$repo_root/tests/bootstrap.sh"
+
+note 'Exercise identity setup with a real controlling terminal and private password entry'
+python3 "$repo_root/tests/identity.py"
 printf '\nAll Ubuntu integration checks passed.\n'

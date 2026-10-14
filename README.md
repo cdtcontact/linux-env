@@ -40,15 +40,23 @@ bash init_env.sh
 
 下载哪个平台的入口，就默认使用该平台获取后续配置，直接 `bash init_env.sh` 即可，无需额外参数。两个仓库的工具配置保持一致，各自入口的默认平台不同，也不会自动切换到另一平台。安装器使用公开 HTTPS，不需要 Git 平台账号或 SSH 密钥；软件包仍从机器现有的 Ubuntu APT 源安装，不自动更换系统软件源或 pip 镜像。
 
-安装器默认配置有效的 `SUDO_USER` 对应账号；没有该变量时配置 root。通过 `sudo -i` 进入 root 后，如需确保配置到已有普通用户，请明确指定用户名，例如：
+在交互终端中执行 `bash init_env.sh`，安装器会依次引导你完成：
+
+1. **主机名**：输入 1–63 个纯英文字母，例如 `myubuntu`；大写会转为小写，直接回车保留原主机名。
+2. **开发用户名**：可以选已有账号，也可以输入新用户名。直接回车使用有效的 `SUDO_USER` 对应账号，没有该变量时使用 root。新普通用户名需以小写英文字母开头，只含小写字母、数字、`_` 和 `-`，最多 32 个字符。
+3. **账号密码**：新用户会创建主目录，通过系统 `passwd` 命令设置密码，成功后再加入 sudo 组。已有用户会先询问是否修改密码，默认不修改。密码需隐藏输入两遍，不通过命令行参数传递，也不写入安装日志。
+
+安装器会给选中的账号配置开发环境。已有账号不会被删除或重建，原有 sudo 权限保持不变。通过 `sudo -i` 进入 root 后，也可指定一个已有用户名作为向导的默认选择，例如：
 
 ```bash
 bash init_env.sh --user alice
 ```
 
-`alice` 需替换为你的已有用户名。安装完成后，以目标用户重新登录以启用 Zsh；也可以先在该用户终端执行 `exec zsh`。
+`alice` 需替换为你的已有用户名。安装完成后，以目标用户重新登录以启用 Zsh；也可以先在该用户终端执行 `exec zsh`。如果创建了新账号，请保留当前登录会话，另开终端确认新账号可以登录。
 
-安装器会更新 APT 索引并安装所需软件包，**不会执行系统升级或自动清理**；上面的 `apt upgrade` 和 `apt autoremove` 由你决定是否运行。脚本不创建用户，不修改密码、SSH、sudo 权限或主机名。
+修改主机名时，安装器会先备份 `/etc/hostname` 和 `/etc/hosts`；检测到 cloud-init 时，会在独立配置文件中设置 `preserve_hostname: true` 和 `manage_etc_hosts: false`，保留自定义主机名及本机解析。已有同名 cloud-init 配置也会备份。脚本不更改 SSH 服务的密码登录策略；设置了账号密码，并不代表云平台和 SSH 服务已允许用密码远程登录。
+
+安装器会更新 APT 索引并安装所需软件包，**不会执行系统升级或自动清理**；上面的 `apt upgrade` 和 `apt autoremove` 由你决定是否运行。
 
 ## 安装内容
 
@@ -117,6 +125,8 @@ deactivate
 
 可以重复执行安装脚本，更新这套受管理的配置。三个 `.local` 文件用于保存你的长期定制，不会被安装器覆盖。需要恢复时，从对应时间戳目录取回文件；登录 Shell 需另行用 `chsh` 改回。
 
+**试用新版前无需删除旧目录。** 安装器会备份需要替换的配置，不动 `~/.ssh` 和你的代码目录，例如 `c`、`c-plus-plus`、`datastructure`、`linux`。旧的 `~/.vim` 和 `~/.oh-my-zsh` 可以保留，新配置不会加载它们；已有 `.linux-env-backup-*` 备份也可保留，确认不再需要恢复后再自行清理。
+
 Git 提交身份由你自行设置，例如：
 
 ```bash
@@ -130,12 +140,20 @@ git config --global user.email "你的邮箱"
 bash init_env.sh --help
 bash init_env.sh --user alice --no-change-shell
 
+# 无人值守安装：只为已有账号配置环境，不设置主机名、创建用户或修改密码
+bash init_env.sh --non-interactive --user alice
+
+# 强制进入向导，需要可用的控制终端
+bash init_env.sh --interactive
+
 # 仅在依赖已安装的机器上使用；缺少依赖时会报错
 bash init_env.sh --user alice --skip-packages
 
 # 明确需要时跳过安装后的自检
 bash init_env.sh --user alice --skip-checks
 ```
+
+默认在交互终端中启用向导；没有交互终端时自动按无人值守方式运行。`--non-interactive` 可显式关闭向导，使用 `--user` 指定的已有账号，或有效的 `SUDO_USER` / root 默认账号。`--interactive` 强制启用向导，没有可用控制终端时会报错。
 
 默认从入口所属仓库（[GitHub](https://github.com/cdtcontact/linux-env) 或 [Gitee](https://gitee.com/peacecdt/linux-env)）的 `main` 下载配置；需要时可手动切换平台、固定版本或使用自己的 fork：
 

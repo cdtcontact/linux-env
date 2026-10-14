@@ -13,12 +13,15 @@ fi
 SKIP_PACKAGES=0
 SKIP_CHECKS=0
 CHANGE_SHELL=1
+INTERACTIVE=auto
 while (($#)); do
   case "$1" in
     --user) [[ $# -ge 2 && "$2" != -* ]] || die '--user 需要已有用户名'; TARGET_USER="$2"; shift ;;
     --no-change-shell) CHANGE_SHELL=0 ;;
     --skip-packages) SKIP_PACKAGES=1 ;;
     --skip-checks) SKIP_CHECKS=1 ;;
+    --interactive) [[ "$INTERACTIVE" != no ]] || die '不能同时使用 --interactive 和 --non-interactive'; INTERACTIVE=yes ;;
+    --non-interactive) [[ "$INTERACTIVE" != yes ]] || die '不能同时使用 --interactive 和 --non-interactive'; INTERACTIVE=no ;;
     --help|-h) bash "$REPO_DIR/init_env.sh" --help; exit 0 ;;
     *) die "未知参数: $1" ;;
   esac
@@ -31,16 +34,29 @@ done
 . /etc/os-release
 [[ ${ID:-} == ubuntu && ${VERSION_ID:-} =~ ^(22\.04|24\.04|26\.04)$ ]] || die '仅支持 Ubuntu 22.04 / 24.04 / 26.04 LTS。'
 [[ "$TARGET_USER" =~ ^[a-zA-Z_][a-zA-Z0-9_.-]*\$?$ ]] || die '用户名不合法。'
-PASSWD_ENTRY="$(getent passwd "$TARGET_USER")" || die "用户 $TARGET_USER 不存在；请先创建用户。"
-IFS=: read -r _ _ TARGET_UID _ _ TARGET_HOME _ <<< "$PASSWD_ENTRY"
-[[ "$TARGET_HOME" == /* && -d "$TARGET_HOME" && ! -L "$TARGET_HOME" ]] || die '目标 home 必须是已存在的绝对目录，不能是符号链接。'
-TARGET_HOME="$(realpath -- "$TARGET_HOME")"
-[[ "$TARGET_HOME" != / && "$TARGET_HOME" != /etc && "$TARGET_HOME" != /usr && "$TARGET_HOME" != /var ]] || die '目标 home 不合法。'
-[[ "$TARGET_UID" == 0 && "$TARGET_USER" == root || "$TARGET_UID" -ge 1000 ]] || die '不配置系统服务账号。'
-[[ $(stat -c %u "$TARGET_HOME") == "$TARGET_UID" ]] || die 'home 所有者与目标用户不一致。'
-for item in config/vimrc config/zshrc config/tmux.conf config/gitconfig config/editorconfig scripts/configure-home.sh scripts/linux-env-doctor scripts/linux-env-new examples/c/CMakeLists.txt examples/cpp/CMakeLists.txt examples/python/pyproject.toml; do
+getent passwd "$TARGET_USER" >/dev/null || die "用户 $TARGET_USER 不存在；请交互运行并在引导中输入新用户名。"
+resolve_target_account() {
+  local entry
+  entry="$(getent passwd "$TARGET_USER")" || die "用户 $TARGET_USER 不存在。"
+  IFS=: read -r _ _ TARGET_UID _ _ TARGET_HOME _ <<< "$entry"
+  [[ "$TARGET_HOME" == /* && -d "$TARGET_HOME" && ! -L "$TARGET_HOME" ]] || die '目标 home 必须是已存在的绝对目录，不能是符号链接。'
+  TARGET_HOME="$(realpath -- "$TARGET_HOME")"
+  [[ "$TARGET_HOME" != / && "$TARGET_HOME" != /etc && "$TARGET_HOME" != /usr && "$TARGET_HOME" != /var ]] || die '目标 home 不合法。'
+  [[ "$TARGET_UID" == 0 && "$TARGET_USER" == root || "$TARGET_UID" -ge 1000 ]] || die '不配置系统服务账号。'
+  [[ $(stat -c %u "$TARGET_HOME") == "$TARGET_UID" ]] || die 'home 所有者与目标用户不一致。'
+}
+for item in config/vimrc config/zshrc config/tmux.conf config/gitconfig config/editorconfig scripts/identity.sh scripts/configure-home.sh scripts/linux-env-doctor scripts/linux-env-new examples/c/CMakeLists.txt examples/cpp/CMakeLists.txt examples/python/pyproject.toml; do
   [[ -f "$REPO_DIR/$item" ]] || die "配置不完整: $item"
 done
+# Detect the original terminal before stdout is redirected through tee.
+if [[ "$INTERACTIVE" == auto ]]; then
+  if [[ -t 0 && -t 1 ]]; then INTERACTIVE=yes; else INTERACTIVE=no; fi
+fi
+if [[ "$INTERACTIVE" == yes ]]; then
+  { exec {TTY_FD}<>/dev/tty; } 2>/dev/null || die '--interactive 需要可用的交互终端。'
+fi
+# shellcheck source=scripts/identity.sh
+source "$REPO_DIR/scripts/identity.sh"
 
 umask 022
 install -d -m 700 /var/log/linux-env
@@ -54,8 +70,17 @@ on_error() {
 trap 'on_error "$?" "$LINENO"' ERR
 exec 9>/run/lock/linux-env.lock
 flock -n 9 || die '已有 linux-env 安装正在运行。'
-log "配置用户: $TARGET_USER，home: $TARGET_HOME"
 log "日志: $LOG_FILE"
+NEW_HOSTNAME=''
+CREATE_USER=0
+RESET_PASSWORD=0
+if [[ "$INTERACTIVE" == yes ]]; then
+  select_identity
+else
+  log "无交互模式：保留主机名和密码，配置已有用户 $TARGET_USER。"
+fi
+if (( ! CREATE_USER )); then resolve_target_account; fi
+log "目标开发用户: $TARGET_USER"
 
 if (( ! SKIP_PACKAGES )); then
   export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a
@@ -69,7 +94,7 @@ if (( ! SKIP_PACKAGES )); then
     apt-get "${apt_options[@]}" update
   fi
   packages=(
-    ca-certificates git curl wget file unzip zip locales bsdutils
+    ca-certificates git curl wget file unzip zip locales bsdutils sudo
     build-essential clang clangd clang-format clang-tidy cmake ninja-build
     gdb pkg-config man-db manpages-dev universal-ctags
     python3 python3-dev python3-pip python3-venv pipx
@@ -89,9 +114,13 @@ if (( ! SKIP_PACKAGES )); then
     apt-get "${apt_options[@]}" install -y --no-install-recommends valgrind
   fi
 fi
-for cmd in git zsh vim tmux python3 gcc g++ cmake ninja gdb clang clangd clang-format clang-tidy pkg-config pipx rg fzf ctags shellcheck runuser; do
+for cmd in git zsh vim tmux python3 gcc g++ cmake ninja gdb clang clangd clang-format clang-tidy pkg-config pipx rg fzf ctags shellcheck runuser passwd useradd usermod hostname; do
   command -v "$cmd" >/dev/null || die "缺少 $cmd；去掉 --skip-packages 后重试。"
 done
+if [[ "$INTERACTIVE" == yes ]]; then apply_account; fi
+resolve_target_account
+if [[ -n "$NEW_HOSTNAME" ]]; then apply_hostname "$NEW_HOSTNAME"; fi
+log "配置用户: $TARGET_USER，home: $TARGET_HOME"
 
 # All third-party programs are installed by apt; no opaque remote install scripts.
 # User files are written as the target user, not by following symlinks as root.

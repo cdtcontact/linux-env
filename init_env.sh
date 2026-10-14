@@ -9,8 +9,10 @@ usage() {
   cat <<'HELP'
 Ubuntu C/C++ / Python 学习环境
 用法: bash init_env.sh [--source gitee|github] [--user 已有用户名] [--no-change-shell]
-                        [--skip-packages] [--skip-checks] [--help]
-默认配置 sudo 调用者；直接 root 登录时配置 root。
+                        [--interactive|--non-interactive] [--skip-packages] [--skip-checks] [--help]
+终端中默认引导设置主机名、开发用户名和密码；回车可保留已有配置。
+--non-interactive  不询问，配置已有 sudo 调用者（或 --user 指定用户）
+--interactive      强制引导，需要可用的交互终端
 --skip-packages  依赖已安装时使用；不会安装缺失的软件包
 --skip-checks    跳过最后的编译和配置自检
 入口默认使用其发布平台；--source 可手动切换来源。
@@ -28,7 +30,7 @@ while (($#)); do
     --source) [[ $# -ge 2 && "$2" != -* ]] || { usage >&2; exit 2; }; SOURCE="$2"; shift ;;
     --user) [[ $# -ge 2 && "$2" != -* ]] || { usage >&2; exit 2; }; args+=("$1" "$2"); shift ;;
     --skip-packages) SKIP_PACKAGES=1; args+=("$1") ;;
-    --no-change-shell|--skip-checks) args+=("$1") ;;
+    --no-change-shell|--skip-checks|--interactive|--non-interactive) args+=("$1") ;;
     *) printf '未知参数: %s\n' "$1" >&2; usage >&2; exit 2 ;;
   esac
   shift
