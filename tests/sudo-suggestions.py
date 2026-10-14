@@ -146,6 +146,7 @@ def test_sudo(root, asynchronous):
         "    'sudo -i') POSTDISPLAY='A' ;;\n"
         "    'say te') POSTDISPLAY='st' ;;\n"
         "  esac\n"
+        "  zle -R\n"
         "}\n"
         "zle -N linux-env-test-inject\n"
         "bindkey '^X' linux-env-test-inject\n"
@@ -188,8 +189,11 @@ def test_sudo(root, asynchronous):
             if inject:
                 os.write(terminal.fd, b"\x18")
                 settle(terminal, 0.2)
-                require("READY> say test" in rendered(bytes(terminal.output[start:])),
-                        "Ordinary command did not display the injected, unaccepted gray suffix")
+                before_enter = bytes(terminal.output[start:])
+                before_lines = rendered(before_enter)
+                require("READY> say test" in before_lines,
+                        "Ordinary command did not display the injected, unaccepted gray suffix: " +
+                        repr(before_lines) + "; terminal bytes=" + repr(before_enter))
             os.write(terminal.fd, b"\r")
             terminal.expect(sentinel)
             terminal.expect(b"READY>")
