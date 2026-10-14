@@ -14,6 +14,25 @@ filetype plugin indent on
 syntax enable
 
 set number
+set cursorline
+set cursorcolumn
+" Keep syntax colors visible beneath a soft row/column crosshair. Reapply it
+" when a personal colorscheme or a light/dark background is selected later.
+function! s:CursorGuides() abort
+    if &background ==# 'dark'
+        highlight CursorLine cterm=NONE ctermbg=236 ctermfg=NONE gui=NONE guibg=#282c34 guifg=NONE
+        highlight CursorColumn cterm=NONE ctermbg=237 ctermfg=NONE gui=NONE guibg=#303744 guifg=NONE
+    else
+        highlight CursorLine cterm=NONE ctermbg=254 ctermfg=NONE gui=NONE guibg=#edf0f5 guifg=NONE
+        highlight CursorColumn cterm=NONE ctermbg=252 ctermfg=NONE gui=NONE guibg=#dce2eb guifg=NONE
+    endif
+endfunction
+call s:CursorGuides()
+augroup linux_env_cursor_guides
+    autocmd!
+    autocmd ColorScheme * call <SID>CursorGuides()
+    autocmd OptionSet background call <SID>CursorGuides()
+augroup END
 set ruler
 set showcmd
 set laststatus=2

@@ -109,14 +109,28 @@ fi
 # Complete against the current command and filesystem on every edit. History
 # suggestions can resurrect deleted filenames (or files from another directory).
 # Keep history available through Up/Down and Ctrl+R, outside the gray suggestions.
-ZSH_AUTOSUGGEST_STRATEGY=(completion)
+ZSH_AUTOSUGGEST_STRATEGY=(linux_env_completion)
 ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=245'
 [[ -r /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh ]] &&
     source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
 
-# Accept only a simple local filename, never an entire suggested shell command.
-# Normal Enter behavior is retained for all other commands and complete names.
-_linux_env_simple_vim_argument() {
+# Suggest a filename only while it is incomplete. In particular, a complete
+# local executable must not acquire an unsolicited filename argument.
+_zsh_autosuggest_strategy_linux_env_completion() {
+    emulate -L zsh
+    unset suggestion
+    local first=${1%%[[:space:]]*}
+    local last=${1##*[[:space:]]}
+    if [[ "$first" == ./* || "$first" == ../* ]] && [[ -f "$first" && -x "$first" ]]; then
+        return 0
+    fi
+    [[ -n "$last" && -f "$last" ]] && return 0
+    _zsh_autosuggest_strategy_completion "$1"
+}
+
+# Enter accepts a simple Vim filename or a displayed relative executable path.
+# It never accepts suggested arguments, pipelines, or an entire shell command.
+_linux_env_simple_path() {
     [[ -n "$1" && "$1" != *[^[:alnum:]_./~+-]* && "$1" != -* ]]
 }
 _linux_env_accept_line() {
@@ -125,14 +139,14 @@ _linux_env_accept_line() {
     local -a matches
     if [[ "$BUFFER" == 'vim '* ]]; then
         typed=${BUFFER#vim }
-        if _linux_env_simple_vim_argument "$typed"; then
+        if _linux_env_simple_path "$typed"; then
             prefix=$typed
             [[ "$prefix" == '~/'* ]] && prefix="$HOME/${prefix#\~/}"
             if [[ ! -e "$prefix" ]]; then
                 candidate="${typed}${POSTDISPLAY}"
                 # Completion can append a separating space after a full name.
                 candidate=${candidate% }
-                if _linux_env_simple_vim_argument "$candidate"; then
+                if _linux_env_simple_path "$candidate"; then
                     [[ "$candidate" == '~/'* ]] && candidate="$HOME/${candidate#\~/}"
                     if [[ "$candidate" == "$prefix"* && -f "$candidate" ]]; then
                         BUFFER="vim ${(q)candidate}"
@@ -150,6 +164,15 @@ _linux_env_accept_line() {
                     return
                 fi
             fi
+        fi
+    elif [[ "$BUFFER" == ./* || "$BUFFER" == ../* ]]; then
+        typed=$BUFFER
+        candidate="${BUFFER}${POSTDISPLAY}"
+        candidate=${candidate% }
+        if _linux_env_simple_path "$typed" && _linux_env_simple_path "$candidate" &&
+            [[ -n "$POSTDISPLAY" && "$candidate" == "$typed"* && -f "$candidate" && -x "$candidate" ]]; then
+            BUFFER=${(q)candidate}
+            POSTDISPLAY=''
         fi
     fi
     zle .accept-line
