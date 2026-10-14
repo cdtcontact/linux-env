@@ -98,7 +98,17 @@ done
 SHARE=/usr/local/share/linux-env
 [[ ! -L "$SHARE" ]] || die "$SHARE 不应为符号链接。"
 install -d -m 755 "$SHARE" /usr/local/bin
-install -d -m 755 "$SHARE/config" "$SHARE/examples"
+install -d -m 755 "$SHARE/config" "$SHARE/examples" "$SHARE/fzf"
+# Keep a packaged fallback: a later apt upgrade may strip documentation again.
+for integration in key-bindings.zsh completion.zsh; do
+  for integration_dir in /usr/share/doc/fzf/examples /usr/share/fzf; do
+    if [[ -r "$integration_dir/$integration" ]]; then
+      install -m 644 "$integration_dir/$integration" "$SHARE/fzf/$integration"
+      break
+    fi
+  done
+done
+[[ -r "$SHARE/fzf/key-bindings.zsh" ]] || die '缺少 fzf Zsh 集成脚本；去掉 --skip-packages 后重试。'
 install -m 644 "$REPO_DIR"/config/* "$SHARE/config/"
 cp -R "$REPO_DIR/examples/." "$SHARE/examples/"
 chmod -R u=rwX,go=rX "$SHARE/config" "$SHARE/examples"

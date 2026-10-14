@@ -96,7 +96,7 @@ if (( $+commands[rg] )); then
 fi
 if (( $+commands[fzf] )); then
     # Ubuntu 22.04+ apt packages; tolerate either packaged layout.
-    for _linux_env_fzf_dir in /usr/share/doc/fzf/examples /usr/share/fzf; do
+    for _linux_env_fzf_dir in /usr/share/doc/fzf/examples /usr/share/fzf /usr/local/share/linux-env/fzf; do
         if [[ -r "$_linux_env_fzf_dir/key-bindings.zsh" ]]; then
             source "$_linux_env_fzf_dir/key-bindings.zsh"
             [[ -r "$_linux_env_fzf_dir/completion.zsh" ]] && source "$_linux_env_fzf_dir/completion.zsh"
