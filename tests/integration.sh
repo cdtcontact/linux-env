@@ -93,9 +93,8 @@ as_learner zsh -ic '
 '
 vim_log=$(mktemp /tmp/linux-env-vim-test.XXXXXXXX)
 chown learner:learner "$vim_log"
-# -es intentionally skips user vimrc unless -u is supplied. Use normal Ex mode
-# here to exercise default vimrc discovery and legacy-plugin isolation together.
-as_learner vim -V1"$vim_log" -i NONE -n -e -c 'qa!' </dev/null || { cat "$vim_log"; fail 'Normal Vim startup failed'; }
+# Test the real terminal startup path: Ex/silent modes have different init rules.
+as_learner script -qefc 'vim -i NONE -n -c "qa!"' "$vim_log" || { cat "$vim_log"; fail 'Normal Vim startup failed'; }
 
 note 'Generate and execute C, C++, and isolated Python starter projects'
 project_dir=$(mktemp -d /tmp/linux-env-projects.XXXXXX)

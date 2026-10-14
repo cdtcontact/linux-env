@@ -10,7 +10,7 @@ fi
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/linux-env-doctor.XXXXXXXX")"
 trap 'rm -rf -- "$WORK_DIR"' EXIT
 trap 'printf "[FAIL] 自检失败（第 %s 行）；请查看上方错误。\n" "$LINENO" >&2' ERR
-for cmd in gcc g++ clang clangd clang-format clang-tidy cmake ninja gdb pkg-config python3 pipx git zsh vim tmux rg fzf ctags shellcheck; do
+for cmd in gcc g++ clang clangd clang-format clang-tidy cmake ninja gdb pkg-config python3 pipx git zsh vim tmux rg fzf ctags shellcheck script; do
   command -v "$cmd" >/dev/null || { printf '[FAIL] 缺少命令: %s\n' "$cmd" >&2; exit 1; }
 done
 printf '#include <stdio.h>\nint main(void) { puts("C OK"); return 0; }\n' > "$WORK_DIR/main.c"
@@ -23,6 +23,6 @@ python3 -m venv "$WORK_DIR/venv"
 "$WORK_DIR/venv/bin/python" -c 'import ssl, sqlite3, venv; print("Python venv OK")'
 "$WORK_DIR/venv/bin/python" -m pip --version
 zsh -n "$HOME/.zshrc"
-TERM=xterm-256color zsh -ic 'print -r -- "Zsh OK"'
+TERM=xterm-256color script -qefc "zsh -ic 'print -r -- \"Zsh OK\"'" /dev/null
 vim -Nu "$HOME/.vimrc" -i NONE -n -es +'qall!'
 printf '[OK] C/C++、Python venv、Zsh、Vim 自检通过。\n'

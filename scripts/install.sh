@@ -69,7 +69,7 @@ if (( ! SKIP_PACKAGES )); then
     apt-get "${apt_options[@]}" update
   fi
   packages=(
-    ca-certificates git curl wget file unzip zip locales
+    ca-certificates git curl wget file unzip zip locales bsdutils
     build-essential clang clangd clang-format clang-tidy cmake ninja-build
     gdb pkg-config man-db manpages-dev universal-ctags
     python3 python3-dev python3-pip python3-venv pipx
