@@ -114,6 +114,43 @@ ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=245'
 [[ -r /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh ]] &&
     source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
 
+_linux_env_file_command() {
+    case "$1" in
+        vim|vi|nvim|rm|gcc|g++|cc|c++|clang|clang++|cat|less|more|head|tail|wc|file|cp|mv|python|python3) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Return just the suggested current word in REPLY, never additional arguments.
+# Lexing/unquoting treats shell text as data; it does not evaluate substitutions.
+_linux_env_current_word_suggestion() {
+    emulate -L zsh
+    local input=$1 proposed=$2 word raw file_path prefix command typed
+    local -a input_words proposed_words
+    REPLY=''
+    [[ -n "$input" && -n "$proposed" ]] || return 1
+    input_words=("${(@z)input}")
+    proposed_words=("${(@z)proposed}")
+    (( ${#input_words} && ${#proposed_words} >= ${#input_words} )) || return 1
+    raw=${input_words[-1]}
+    # An outside space starts a new argument. Do not invent one automatically.
+    [[ "$input" == *"$raw" ]] || return 1
+    command=${(Q)input_words[1]}
+    word=${proposed_words[${#input_words}]}
+    file_path=${(Q)word}
+    typed=${(Q)raw}
+    [[ "$file_path" == '~/'* ]] && file_path="$HOME/${file_path#\~/}"
+    [[ "$typed" == '~/'* ]] && typed="$HOME/${typed#\~/}"
+    if [[ "$command" == ./* || "$command" == ../* ]]; then
+        (( ${#input_words} == 1 )) && [[ ! -f "$typed" && -f "$file_path" && -x "$file_path" ]] || return 1
+    elif (( ${#input_words} > 1 )) && _linux_env_file_command "$command" && [[ "$raw" != -* ]]; then
+        [[ ! -f "$typed" && ( -e "$file_path" || -L "$file_path" ) ]] || return 1
+    fi
+    prefix=${input:0:${#input}-${#raw}}
+    REPLY="$prefix$word"
+    [[ "$REPLY" == "$input"* && "$REPLY" != "$input" ]]
+}
+
 # Suggest a filename only while it is incomplete. In particular, a complete
 # local executable must not acquire an unsolicited filename argument.
 _zsh_autosuggest_strategy_linux_env_completion() {
@@ -121,7 +158,7 @@ _zsh_autosuggest_strategy_linux_env_completion() {
     typeset -g suggestion=''
     local first=${1%%[[:space:]]*}
     local last=${1##*[[:space:]]}
-    local candidate
+    local candidate REPLY
     if [[ "$first" == ./* || "$first" == ../* ]] && [[ -f "$first" && -x "$first" ]]; then
         return 0
     fi
@@ -137,17 +174,38 @@ _zsh_autosuggest_strategy_linux_env_completion() {
         done
     fi
     _zsh_autosuggest_strategy_completion "$1"
+    if _linux_env_current_word_suggestion "$1" "$suggestion"; then
+        suggestion=$REPLY
+    else
+        suggestion=''
+    fi
 }
 
+# The plugin can reuse a suffix while typing, bypassing the strategy entirely.
+# Validate cached/async suggestions immediately before every visible redraw too.
+_linux_env_filter_suggestion() {
+    emulate -L zsh
+    local REPLY
+    [[ -n "$POSTDISPLAY" ]] || return 0
+    if _linux_env_current_word_suggestion "$BUFFER" "${BUFFER}${POSTDISPLAY}"; then
+        POSTDISPLAY=${REPLY#$BUFFER}
+    else
+        POSTDISPLAY=''
+    fi
+}
+autoload -Uz add-zle-hook-widget
+add-zle-hook-widget line-pre-redraw _linux_env_filter_suggestion
+
 # Enter accepts a simple Vim filename or a displayed relative executable path.
-# It never accepts suggested arguments, pipelines, or an entire shell command.
+# Common file commands also accept just their displayed, existing filename.
+# It never adds further arguments, pipelines, or an entire suggested command.
 _linux_env_simple_path() {
     [[ -n "$1" && "$1" != *[^[:alnum:]_./~+-]* && "$1" != -* ]]
 }
 _linux_env_accept_line() {
     emulate -L zsh
-    local prefix candidate typed
-    local -a matches
+    local prefix candidate typed word REPLY
+    local -a matches words
     if [[ "$BUFFER" == 'vim '* ]]; then
         typed=${BUFFER#vim }
         if _linux_env_simple_path "$typed"; then
@@ -181,9 +239,25 @@ _linux_env_accept_line() {
         candidate="${BUFFER}${POSTDISPLAY}"
         candidate=${candidate% }
         if _linux_env_simple_path "$typed" && _linux_env_simple_path "$candidate" &&
-            [[ -n "$POSTDISPLAY" && "$candidate" == "$typed"* && -f "$candidate" && -x "$candidate" ]]; then
+            [[ -n "$POSTDISPLAY" && ! -e "$typed" && "$candidate" == "$typed"* && -f "$candidate" && -x "$candidate" ]]; then
             BUFFER=${(q)candidate}
             POSTDISPLAY=''
+        fi
+    elif [[ -n "$POSTDISPLAY" ]]; then
+        words=("${(@z)BUFFER}")
+        if (( ${#words} > 1 )) && [[ "${words[-1]}" != -* ]] && _linux_env_file_command "${words[1]}"; then
+            # Restrict Enter expansion to simple literal command lines. Quoted
+            # paths and shell expressions retain normal Enter and Tab behavior.
+            for word in "${words[@]}"; do
+                if [[ -z "$word" || "$word" == *[^[:alnum:]_./~+=-]* ]]; then
+                    zle .accept-line
+                    return
+                fi
+            done
+            if _linux_env_current_word_suggestion "$BUFFER" "${BUFFER}${POSTDISPLAY}"; then
+                BUFFER=$REPLY
+                POSTDISPLAY=''
+            fi
         fi
     fi
     zle .accept-line

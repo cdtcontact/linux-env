@@ -90,6 +90,9 @@ def test_live_suggestions(root):
     program.write_text("#!/bin/sh\nexit 0\n")
     program.chmod(0o755)
     (case / "10.string_cat.c").touch()
+    target = case / "test.c"
+    target.touch()
+    (case / "test.cpp").touch()
     record = case / "suggestion.txt"
     script = case / "start.zsh"
     script.write_text(
@@ -99,7 +102,16 @@ def test_live_suggestions(root):
         # Synchronous fetching makes the snapshot deterministic while using the
         # real completion engine and plugin widgets inside a controlling PTY.
         'unset ZSH_AUTOSUGGEST_USE_ASYNC\n'
-        'ZSH_AUTOSUGGEST_IGNORE_WIDGETS+=(linux-env-test-capture)\n'
+        'ZSH_AUTOSUGGEST_IGNORE_WIDGETS+=(linux-env-test-capture linux-env-test-stale)\n'
+        'linux-env-test-stale() {\n'
+        '  case "$BUFFER" in\n'
+        "    'rm te') POSTDISPLAY='st.c 10.string_cat.c; echo UNWANTED' ;;\n"
+        "    'rm test.c') POSTDISPLAY='10.string_cat.c' ;;\n"
+        "    'gcc test.c') POSTDISPLAY=' 10.string_cat.c' ;;\n"
+        '  esac\n'
+        '}\n'
+        'zle -N linux-env-test-stale\n'
+        "bindkey '^X' linux-env-test-stale\n"
         'linux-env-test-capture() {\n'
         '  print -r -- "${BUFFER}${POSTDISPLAY}" > ' + str(record) + '\n'
         '  zle -I\n'
@@ -114,11 +126,16 @@ def test_live_suggestions(root):
         terminal.send(("source " + str(script)).encode())
         terminal.expect(b"READY>")
 
-        def snapshot(typed):
+        def snapshot(typed, inject=False):
             os.write(terminal.fd, typed.encode())
             until = time.monotonic() + 0.5
             while time.monotonic() < until:
                 terminal.pump()
+            if inject:
+                os.write(terminal.fd, b"\x18")
+                until = time.monotonic() + 0.2
+                while time.monotonic() < until:
+                    terminal.pump()
             os.write(terminal.fd, b"\x07")
             terminal.expect(b"SNAPSHOT-DONE")
             terminal.expect(b"READY>")
@@ -133,6 +150,14 @@ def test_live_suggestions(root):
             require(visible == prefix, "Deleted/missing file reappeared: " + visible)
         require(snapshot("rm keep") == "rm keep.c", "Other live files stopped completing")
         require(snapshot("gcc keep.c") == "gcc keep.c", "Complete compiler input acquired another filename")
+        require(snapshot("rm te", inject=True) == "rm test.c", "Cached suggestion appended another argument")
+        require(snapshot("rm test.c", inject=True) == "rm test.c", "Cached suggestion glued filenames together")
+        require(snapshot("gcc test.c", inject=True) == "gcc test.c", "Cached compiler suggestion added a file")
+        for prefix in ("rm ", "rm test.c ", "gcc test.c "):
+            require(snapshot(prefix) == prefix.rstrip(), "An empty next argument was auto-filled")
+        target.unlink()
+        # test.cpp exists, but a cached reference to the deleted test.c is invalid.
+        require(snapshot("rm te", inject=True) == "rm te", "Cached suggestion kept a deleted file")
         visible = snapshot("./a.o")
         require(visible == "./a.out", "Executable name was not suggested: " + repr(visible))
         for prefix in ("./a.out", "./a.out ", "./a.out 10."):
@@ -194,6 +219,50 @@ def test_run_suggested_program(root):
         terminal.finish()
 
 
+def test_file_command_enter(root):
+    case = root / "file-command-enter"
+    case.mkdir()
+    other = case / "10.string_cat.c"
+    other.write_text("Keep this unrelated file.\n")
+    target = case / "test.c"
+    record = case / "arguments.txt"
+    (case / "compile.c").write_text("int main(void) { return 0; }\n")
+    script = case / "start.zsh"
+    script.write_text('source ' + str(REPO / 'config/zshrc') + '\n'
+                      'HISTFILE=' + str(case / 'history') + '\n'
+                      'cd ' + str(case) + '\n'
+                      'rm() { print -rl -- "$@" > ' + str(record) +
+                      '; command rm -- "$@"; print -r -- REMOVED; }\n'
+                      'gcc() { print -rl -- "$@" > ' + str(record) +
+                      '; command gcc "$@"; print -r -- COMPILED; }\n'
+                      "PROMPT='READY> '; RPROMPT=''\n")
+    with Terminal(["zsh", "-dfi"]) as terminal:
+        terminal.send(("source " + str(script)).encode())
+        terminal.expect(b"READY>")
+        for keys in (b"rm te", b"rm te\t"):
+            target.touch()
+            os.write(terminal.fd, keys)
+            until = time.monotonic() + 0.5
+            while time.monotonic() < until:
+                terminal.pump()
+            os.write(terminal.fd, b"\r")
+            terminal.expect(b"REMOVED")
+            terminal.expect(b"READY>")
+            require(record.read_text().splitlines() == ["test.c"], "rm received an unintended filename")
+            require(not target.exists() and other.exists(), "rm did not remove exactly the selected fixture")
+        os.write(terminal.fd, b"gcc -Wall compile")
+        until = time.monotonic() + 0.5
+        while time.monotonic() < until:
+            terminal.pump()
+        os.write(terminal.fd, b"\r")
+        terminal.expect(b"COMPILED")
+        terminal.expect(b"READY>")
+        require(record.read_text().splitlines() == ["-Wall", "compile.c"], "gcc received extra or incomplete input")
+        require((case / "a.out").exists() and other.exists(), "Compilation failed or changed another file")
+        terminal.send(b"exit 0")
+        terminal.finish()
+
+
 def main():
     with tempfile.TemporaryDirectory(prefix="linux-env-editor-") as directory:
         root = Path(directory)
@@ -210,6 +279,7 @@ def main():
         test_shell(root, b"vim other.py\r", "other.py", ["other.py"])
         test_live_suggestions(root)
         test_run_suggested_program(root)
+        test_file_command_enter(root)
     print("Vim headers and auto pairs, real Zsh Tab/Enter, and live filename suggestion checks passed.")
 
 
