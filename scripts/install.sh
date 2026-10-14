@@ -162,5 +162,5 @@ if (( ! SKIP_CHECKS )); then
     /usr/local/bin/linux-env-doctor
 fi
 log "安装完成。重新登录，或运行: su - $TARGET_USER"
-log '创建项目: linux-env-new cpp ~/code/hello-cpp（也支持 c / python）'
+log '环境已就绪；不会自动创建项目目录。'
 log '以后自检: linux-env-doctor'

@@ -66,15 +66,21 @@ bash init_env.sh --user alice
 | Python | Python 3、开发头文件、pip、venv、pipx；每个项目独立使用虚拟环境 |
 | 编辑与终端 | Vim、Zsh、tmux、Git、ripgrep、fzf、Universal Ctags、ShellCheck |
 | Zsh 插件 | Ubuntu 软件源中的自动建议和语法高亮 |
-| 学习起点 | C/C++ 的 CMake 项目和测试，以及 Python 标准库 unittest 示例 |
+| 新文件模板 | 手动用 Vim 新建 C/C++、Python 文件时插入署名、时间和常用头文件/导入 |
 
-Python 环境不向系统 Python 全局安装第三方包。`pytest`、`ruff` 等工具可按项目需要安装；基础示例与安装自检无需访问 PyPI。
+Python 环境不向系统 Python 全局安装第三方包。`pytest`、`ruff` 等工具可按项目需要安装；安装自检无需访问 PyPI。
 
 默认把目标账号的登录 Shell 设为 Zsh；使用 `--no-change-shell` 可保留原登录 Shell。
 
-## 从示例开始学习
+## 文件编辑与可选示例
 
-以下命令在**目标用户自己的终端**运行。`linux-env-new` 复制模板到新目录，已有目录不会被覆盖：
+安装只配置工具和编辑器，**不会自动创建 C/C++/Python 项目或 `~/code` 目录**，也不会移动或覆盖已有项目。
+
+手动运行 `vim test.c`、`vim test.cpp`、`vim test.py` 新建文件时，会在缓冲区插入文件名、作者 `chendatao`、邮箱 `peacecdt@gmail.com`、创建时间及常用头文件或标准库导入；保存后才写入磁盘，已有文件不会改写。
+
+Zsh 用户名为柔和绿色（root 为珊瑚色），主机名为灰蓝色，路径为暖米色。保留灰色自动建议与 Tab 补全：`vim tes` 若有可用的完整文件建议，Enter 可直接打开该文件；没有灰色建议时，唯一前缀匹配也可直接打开，多个匹配则进入补全选择。完整文件名、其他命令和包含额外参数的命令保持原行为。
+
+可选的手动项目模板命令仍保留，只有你明确执行才会生成目录，已有目录不会被覆盖：
 
 ```bash
 linux-env-new c ~/code/hello-c
@@ -110,7 +116,7 @@ python -m pip install pytest ruff
 deactivate
 ```
 
-完整示例保存在 `~/code/linux-env-examples`，可反复复制练习。运行 `linux-env-doctor` 可重新检查 C/C++ 编译、Python 虚拟环境与配置文件；首次安装默认执行该检查。
+示例仅作为可选模板存放在系统目录，不会复制到家目录。运行 `linux-env-doctor` 可重新检查 C/C++ 编译、Python 虚拟环境与配置文件；首次安装默认执行该检查。
 
 ## 配置、自定义与备份
 

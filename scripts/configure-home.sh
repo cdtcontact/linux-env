@@ -62,15 +62,6 @@ if ! git config --global --get-all include.path | grep -qxF "$INCLUDE_PATH"; the
   mv -f -- "$TMP_CONFIG" "$GLOBAL_CONFIG"
 fi
 
-EXAMPLES="$HOME/code/linux-env-examples"
-if [[ -L "$EXAMPLES" ]] || { [[ -e "$EXAMPLES" ]] && ! diff -qr "$SHARE/examples" "$EXAMPLES" >/dev/null 2>&1; }; then
-  backup "$EXAMPLES"
-fi
-if [[ ! -d "$EXAMPLES" ]]; then
-  mkdir -p -- "$HOME/code"
-  cp -R -- "$SHARE/examples" "$EXAMPLES"
-fi
 if (( BACKED_UP )); then
   printf '[linux-env] 原配置已备份: %s\n' "$BACKUP_DIR"
 fi
-printf '[linux-env] 学习样例: %s\n' "$EXAMPLES"

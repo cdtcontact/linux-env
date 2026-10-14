@@ -88,7 +88,7 @@ _linux_env_update_prompt() {
 autoload -Uz add-zsh-hook
 add-zsh-hook precmd _linux_env_update_prompt
 setopt prompt_subst
-PROMPT='%(!.%F{red}.%F{green})%n@%m%f:%F{blue}%~%f${_linux_env_git_prompt} %(?.%F{green}.%F{red})%#%f '
+PROMPT='%(!.%F{203}.%F{114})%n%f%F{245}@%f%F{110}%m%f:%F{180}%~%f${_linux_env_git_prompt} %(?.%F{114}.%F{203})%#%f '
 
 if (( $+commands[rg] )); then
     export FZF_DEFAULT_COMMAND='rg --files --hidden --glob "!.git" --glob "!.venv" --glob "!build"'
@@ -106,8 +106,53 @@ if (( $+commands[fzf] )); then
     unset _linux_env_fzf_dir
 fi
 
+ZSH_AUTOSUGGEST_STRATEGY=(history completion)
+ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=245'
 [[ -r /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh ]] &&
     source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
+
+# Accept only a simple local filename, never an entire suggested shell command.
+# Normal Enter behavior is retained for all other commands and complete names.
+_linux_env_simple_vim_argument() {
+    [[ -n "$1" && "$1" != *[^[:alnum:]_./~+-]* && "$1" != -* ]]
+}
+_linux_env_accept_line() {
+    emulate -L zsh
+    local prefix candidate typed
+    local -a matches
+    if [[ "$BUFFER" == 'vim '* ]]; then
+        typed=${BUFFER#vim }
+        if _linux_env_simple_vim_argument "$typed"; then
+            prefix=$typed
+            [[ "$prefix" == '~/'* ]] && prefix="$HOME/${prefix#\~/}"
+            if [[ ! -e "$prefix" ]]; then
+                candidate="${typed}${POSTDISPLAY}"
+                if _linux_env_simple_vim_argument "$candidate"; then
+                    [[ "$candidate" == '~/'* ]] && candidate="$HOME/${candidate#\~/}"
+                    if [[ "$candidate" == "$prefix"* && -f "$candidate" ]]; then
+                        BUFFER="vim ${(q)candidate}"
+                        POSTDISPLAY=''
+                        zle .accept-line
+                        return
+                    fi
+                fi
+                matches=("$prefix"*(N-.))
+                if (( ${#matches} == 1 )); then
+                    BUFFER="vim ${(q)matches[1]}"
+                    POSTDISPLAY=''
+                elif (( ${#matches} > 1 )); then
+                    zle expand-or-complete
+                    return
+                fi
+            fi
+        fi
+    fi
+    zle .accept-line
+}
+zle -N _linux_env_accept_line
+bindkey '^M' _linux_env_accept_line
+bindkey '^J' _linux_env_accept_line
+bindkey '^I' expand-or-complete
 
 # Put personal aliases and settings here; installers do not replace this file.
 [[ -r "$HOME/.zshrc.local" ]] && source "$HOME/.zshrc.local"

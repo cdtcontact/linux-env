@@ -67,18 +67,18 @@ as_learner sudo -i bash "$repo_root/init_env.sh" --no-change-shell
 grep -R -Fq 'linux-env-test original vimrc' /home/learner/.local/state/linux-env/backups || fail 'Original Vim configuration was not backed up'
 grep -R -Fq 'linux-env-test original zshrc' /home/learner/.local/state/linux-env/backups || fail 'Original Zsh configuration was not backed up'
 backups_before=$(backup_listing)
-examples_before=$(find /home/learner/code/linux-env-examples -type f -exec sha256sum {} + | LC_ALL=C sort)
+[[ ! -e /home/learner/code ]] || fail "Installer automatically created project directories"
 
-note 'Repeat installation without new backups, duplicate includes, or changed examples'
+note 'Repeat installation without new backups, duplicate includes, or project directories'
 bash "$repo_root/init_env.sh" --user learner --skip-packages
 [[ $(getent passwd learner | cut -d: -f7) == /usr/bin/zsh || $(getent passwd learner | cut -d: -f7) == /bin/zsh ]] || fail 'Default login shell is not Zsh'
 [[ $(backup_listing) == "$backups_before" ]] || fail 'Unchanged reinstall created another backup'
-[[ $(find /home/learner/code/linux-env-examples -type f -exec sha256sum {} + | LC_ALL=C sort) == "$examples_before" ]] || fail 'Unchanged reinstall changed examples'
+[[ ! -e /home/learner/code ]] || fail "Reinstall automatically created project directories"
 [[ $(as_learner git config --global --get-all include.path | grep -Fxc /home/learner/.config/linux-env/gitconfig) == 1 ]] || fail 'Reinstall duplicated the Git include'
 [[ $(sha256sum /home/learner/.ssh/authorized_keys) == "$ssh_before" ]] || fail 'Installer modified SSH keys'
 [[ $(sha256sum /etc/sudoers /etc/sudoers.d/linux-env-test) == "$sudo_before" ]] || fail 'Installer modified sudo policy'
 grep -Fq "throw 'legacy plugin loaded'" /home/learner/.vim/plugin/legacy-error.vim || fail 'Old Vim plugins were removed instead of preserved'
-[[ -z $(find /home/learner/.config/linux-env /home/learner/code/linux-env-examples -not -user learner -print -quit) ]] || fail 'Installed user files are owned by root'
+[[ -z $(find /home/learner/.config/linux-env -not -user learner -print -quit) ]] || fail 'Installed user files are owned by root'
 
 note 'Doctor, Vim, and interactive Zsh must work as the ordinary user'
 as_learner /usr/local/bin/linux-env-doctor
@@ -117,15 +117,13 @@ expect_failure as_learner /usr/local/bin/linux-env-new c "$project_dir/c"
 grep -Fq 'Do not overwrite this file' "$project_dir/c/personal.txt" || fail 'Project generator overwrote an existing directory'
 expect_failure as_learner /usr/local/bin/linux-env-new unknown "$project_dir/unknown"
 
-note 'A changed personal example must survive installation'
-personal_example=/home/learner/code/linux-env-examples/c/main.c
-[[ -f $personal_example ]] || personal_example=$(find /home/learner/code/linux-env-examples/c -type f -name '*.c' -print -quit)
-[[ -n $personal_example ]] || fail 'C example source is missing'
-printf '\n/* linux-env-test personal edit */\n' >>"$personal_example"
+note 'Existing personal project directories must stay untouched'
+install -d -o learner -g learner /home/learner/code/linux-env-examples
+printf 'personal project\n' >/home/learner/code/linux-env-examples/personal.txt
+chown learner:learner /home/learner/code/linux-env-examples/personal.txt
 bash "$repo_root/init_env.sh" --user learner --skip-packages --skip-checks
-if ! grep -Fq 'linux-env-test personal edit' "$personal_example"; then
-    grep -R -Fq 'linux-env-test personal edit' /home/learner/.local/state/linux-env/backups || fail 'A personal example edit was lost without a backup'
-fi
+[[ $(cat /home/learner/code/linux-env-examples/personal.txt) == 'personal project' ]] || fail 'Existing project was changed'
+[[ $(find /home/learner/code/linux-env-examples -type f | wc -l) == 1 ]] || fail 'Installer added example projects'
 
 note 'Explicit root configuration is supported without changing its login shell'
 root_shell=$(getent passwd root | cut -d: -f7)
@@ -138,4 +136,5 @@ bash "$repo_root/tests/bootstrap.sh"
 
 note 'Exercise identity setup with a real controlling terminal and private password entry'
 python3 "$repo_root/tests/identity.py"
+python3 "$repo_root/tests/editor.py"
 printf '\nAll Ubuntu integration checks passed.\n'

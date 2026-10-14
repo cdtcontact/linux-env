@@ -61,6 +61,36 @@ if executable('rg')
     set grepformat=%f:%l:%c:%m
 endif
 
+" Insert a header only for a new file. Existing files are never rewritten.
+let g:linux_env_author = get(g:, 'linux_env_author', 'chendatao')
+let g:linux_env_email = get(g:, 'linux_env_email', 'peacecdt@gmail.com')
+function! s:NewSourceHeader() abort
+    if line('$') != 1 || getline(1) !=# '' || &buftype !=# ''
+        return
+    endif
+    let l:ext = tolower(expand('%:e'))
+    let l:meta = ['File Name: ' . expand('%:t'),
+                \ 'Author: ' . g:linux_env_author,
+                \ 'Mail: ' . g:linux_env_email,
+                \ 'Created Time: ' . strftime('%Y-%m-%d %H:%M:%S %Z')]
+    if l:ext ==# 'py'
+        let l:lines = ['#!/usr/bin/env python3', '# -*- coding: utf-8 -*-', '# ' . repeat('*', 70)]
+        call extend(l:lines, map(copy(l:meta), '''# > '' . v:val'))
+        call extend(l:lines, ['# ' . repeat('*', 70), '', 'import sys', 'from pathlib import Path', ''])
+    else
+        let l:lines = ['/' . repeat('*', 71)]
+        call extend(l:lines, map(copy(l:meta), ''' * > '' . v:val'))
+        call extend(l:lines, [' ' . repeat('*', 70) . '/', ''])
+        if l:ext ==# 'c'
+            call extend(l:lines, ['#include <stdio.h>', '#include <stdlib.h>', '#include <string.h>', ''])
+        else
+            call extend(l:lines, ['#include <iostream>', '#include <string>', '#include <vector>', '#include <algorithm>', ''])
+        endif
+    endif
+    call setline(1, l:lines)
+    call cursor(len(l:lines), 1)
+endfunction
+
 " :make on Python checks syntax. It does not execute the edited program.
 " Resolve an interpreter only when explicitly running :make, so a newly created
 " .venv also works. shellescape(..., 1) protects shell and Vim special characters.
@@ -94,6 +124,7 @@ endfunction
 
 augroup linux_env
     autocmd!
+    autocmd BufNewFile *.c,*.cpp,*.cc,*.cxx,*.py call <SID>NewSourceHeader()
     autocmd FileType c,cpp setlocal suffixesadd=.h,.hpp,.hh,.hxx
     autocmd FileType c,cpp setlocal makeprg=cmake\ --build\ build
     autocmd FileType python call <SID>PythonMake()
