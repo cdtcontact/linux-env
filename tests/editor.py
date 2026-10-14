@@ -130,7 +130,8 @@ def test_live_suggestions(root):
         terminal.send(b"cd elsewhere")
         terminal.expect(b"READY>")
         require(snapshot("rm keep") == "rm keep", "Filename leaked from the previous directory")
-        terminal.send(b"exit")
+        # The capture widget cancels the input line, leaving a nonzero status.
+        terminal.send(b"exit 0")
         terminal.finish()
     require("rm 12.c" in history.read_text(), "Suggestion filtering erased command history")
 
