@@ -6,12 +6,14 @@ for s:background in ['dark', 'light']
     execute 'set background=' . s:background
     " OptionSet is suppressed during startup (-S), so simulate a theme reload.
     doautocmd ColorScheme
-    call assert_equal(s:background ==# 'dark' ? '236' : '254', synIDattr(hlID('CursorLine'), 'bg', 'cterm'))
+    call assert_equal('', synIDattr(hlID('CursorLine'), 'bg', 'cterm'), 'Cursor row must have no background fill')
     call assert_equal(s:background ==# 'dark' ? '237' : '252', synIDattr(hlID('CursorColumn'), 'bg', 'cterm'))
-    call assert_equal('', synIDattr(hlID('CursorLine'), 'underline', 'cterm'), 'Guide must not underline code')
+    call assert_equal('1', synIDattr(hlID('CursorLine'), 'underline', 'cterm'), 'Cursor row must be a thin underline')
+    call assert_equal('1', synIDattr(hlID('CursorLine'), 'underline', 'gui'))
 endfor
 colorscheme default
-call assert_equal(&background ==# 'dark' ? '236' : '254', synIDattr(hlID('CursorLine'), 'bg', 'cterm'))
+call assert_equal('', synIDattr(hlID('CursorLine'), 'bg', 'cterm'))
+call assert_equal('1', synIDattr(hlID('CursorLine'), 'underline', 'cterm'))
 function! s:Input(keys, expected, filetype) abort
     enew!
     execute 'setlocal filetype=' . a:filetype

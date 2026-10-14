@@ -16,14 +16,13 @@ syntax enable
 set number
 set cursorline
 set cursorcolumn
-" Keep syntax colors visible beneath a soft row/column crosshair. Reapply it
+" Underline the cursor row and shade its column, keeping syntax colors. Reapply
 " when a personal colorscheme or a light/dark background is selected later.
 function! s:CursorGuides() abort
+    highlight CursorLine term=underline cterm=underline ctermbg=NONE ctermfg=NONE gui=underline guibg=NONE guifg=NONE
     if &background ==# 'dark'
-        highlight CursorLine cterm=NONE ctermbg=236 ctermfg=NONE gui=NONE guibg=#282c34 guifg=NONE
         highlight CursorColumn cterm=NONE ctermbg=237 ctermfg=NONE gui=NONE guibg=#303744 guifg=NONE
     else
-        highlight CursorLine cterm=NONE ctermbg=254 ctermfg=NONE gui=NONE guibg=#edf0f5 guifg=NONE
         highlight CursorColumn cterm=NONE ctermbg=252 ctermfg=NONE gui=NONE guibg=#dce2eb guifg=NONE
     endif
 endfunction
