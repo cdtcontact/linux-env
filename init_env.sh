@@ -37,7 +37,7 @@ while (($#)); do
 done
 case "$SOURCE" in
   gitee) DEFAULT_REPO_URL=https://gitee.com/peacecdt/linux-env.git ;;
-  github) DEFAULT_REPO_URL=https://github.com/cdtcontact/linux-env.git ;;
+  github) DEFAULT_REPO_URL=https://github.com/peacecdt/linux-env.git ;;
   *) printf '来源不合法: %s；可用 gitee / github。\n' "$SOURCE" >&2; exit 2 ;;
 esac
 

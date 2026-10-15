@@ -50,7 +50,7 @@ printf '\n' >>"$LINUX_ENV_GIT_LOG"
 arguments=("$@")
 if [[ $# -eq 6 && $1 == -C && $3 == remote && $4 == add && $5 == origin ]]; then
     case "$6" in
-        https://gitee.com/peacecdt/linux-env.git | https://github.com/cdtcontact/linux-env.git)
+        https://gitee.com/peacecdt/linux-env.git | https://github.com/peacecdt/linux-env.git)
             arguments[5]="file://$LINUX_ENV_FIXTURE"
             ;;
         "file://$LINUX_ENV_FIXTURE") ;;
@@ -117,10 +117,10 @@ exec "$@" --source "$source_name"
 SOURCE
 chmod 0755 "$work_dir/bin/bootstrap-with-source"
 
-run_bootstrap https://github.com/cdtcontact/linux-env.git github
+run_bootstrap https://github.com/peacecdt/linux-env.git github
 run_bootstrap https://gitee.com/peacecdt/linux-env.git gitee
 run_bootstrap https://gitee.com/peacecdt/linux-env.git github env LINUX_ENV_SOURCE=gitee
-run_bootstrap https://github.com/cdtcontact/linux-env.git gitee env LINUX_ENV_SOURCE=github
+run_bootstrap https://github.com/peacecdt/linux-env.git gitee env LINUX_ENV_SOURCE=github
 run_bootstrap https://gitee.com/peacecdt/linux-env.git github \
     env LINUX_ENV_SOURCE=github bootstrap-with-source gitee
 run_bootstrap "file://$fixture" gitee \

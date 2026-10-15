@@ -20,7 +20,7 @@ apt install wget ca-certificates -y
 **GitHub 仓库安装**：入口和后续配置均从 GitHub 下载。
 
 ```bash
-wget -O init_env.sh https://raw.githubusercontent.com/cdtcontact/linux-env/main/init_env.sh
+wget -O init_env.sh https://raw.githubusercontent.com/peacecdt/linux-env/main/init_env.sh
 bash init_env.sh
 ```
 
@@ -186,7 +186,7 @@ bash init_env.sh --user alice --skip-checks
 
 默认在交互终端中启用向导；没有交互终端时自动按无人值守方式运行。`--non-interactive` 可显式关闭向导，使用 `--user` 指定的已有账号，或有效的 `SUDO_USER` / root 默认账号。`--interactive` 强制启用向导，没有可用控制终端时会报错。
 
-默认从入口所属仓库（[GitHub](https://github.com/cdtcontact/linux-env) 或 [Gitee](https://gitee.com/peacecdt/linux-env)）的 `main` 下载配置；需要时可手动切换平台、固定版本或使用自己的 fork：
+默认从入口所属仓库（[GitHub](https://github.com/peacecdt/linux-env) 或 [Gitee](https://gitee.com/peacecdt/linux-env)）的 `main` 下载配置；需要时可手动切换平台、固定版本或使用自己的 fork：
 
 ```bash
 # 显式选择下载源
