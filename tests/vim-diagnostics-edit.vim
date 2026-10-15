@@ -5,12 +5,22 @@ let s:serial = 0
 let g:ale_c_cc_executable = s:case.compiler
 
 function! s:Capture() abort
+    " Observe the actual command area before the probe does any other work.
+    " <Cmd> keeps INSERT active, so a normal-mode ALE echo cannot satisfy this.
+    let l:bottom = []
+    for l:row in range(max([1, &lines - 1]), &lines)
+        let l:text = ''
+        for l:column in range(1, &columns)
+            let l:text .= screenstring(l:row, l:column)
+        endfor
+        call add(l:bottom, l:text)
+    endfor
     let s:serial += 1
     let l:signs = sign_getplaced(bufnr(''), {'group': '*'})[0].signs
     call filter(l:signs, 'v:val.name =~# "^ALE" && v:val.name !=# "ALEDummySign"')
     let l:state = {'serial': s:serial, 'mode': mode(1), 'line': line('.'),
                 \ 'loclist': getloclist(0), 'signs': l:signs, 'lines': getline(1, '$'),
-                \ 'checking': ale#engine#IsCheckingBuffer(bufnr('')),
+                \ 'checking': ale#engine#IsCheckingBuffer(bufnr('')), 'bottom': l:bottom,
                 \ 'checks': filereadable(s:case.calls) ? len(readfile(s:case.calls)) : 0}
     call writefile([json_encode(l:state)], s:case.output . '.tmp')
     call rename(s:case.output . '.tmp', s:case.output)

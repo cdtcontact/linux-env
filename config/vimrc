@@ -125,6 +125,57 @@ function! s:ClearDiagnosticEcho() abort
     endif
 endfunction
 
+let s:insert_diagnostic_echo_timer = -1
+function! s:StopInsertDiagnosticEcho() abort
+    if s:insert_diagnostic_echo_timer != -1
+        call timer_stop(s:insert_diagnostic_echo_timer)
+        let s:insert_diagnostic_echo_timer = -1
+    endif
+endfunction
+
+function! s:EchoInsertDiagnostic(buffer, row, tick, timer) abort
+    if a:timer != s:insert_diagnostic_echo_timer
+        return
+    endif
+    let s:insert_diagnostic_echo_timer = -1
+    if bufnr('') != a:buffer || line('.') != a:row || b:changedtick != a:tick
+                \ || !s:DiagnosticsEnabled() || mode(1) !~# '^i'
+                \ || get(b:, 'linux_env_diagnostic_pending_row', 0) == a:row
+        return
+    endif
+    let [l:info, l:item] = ale#util#FindItemAtCursor(a:buffer)
+    if empty(l:item)
+        call s:ClearDiagnosticEcho()
+        return
+    endif
+    let l:text = ale#GetLocItemMessage(l:item, ale#Var(a:buffer, 'echo_msg_format'))
+    let l:text = strtrans(substitute(l:text, '[\r\n\t]', ' ', 'g'))
+    " ALE's normal-mode echo helper uses :normal, which would interrupt INSERT.
+    " Keep this to one display row, including wide characters, without a prompt.
+    let l:width = max([0, v:echospace - 1])
+    if l:width == 0
+        return
+    endif
+    if strdisplaywidth(l:text) > l:width
+        let l:text = strcharpart(l:text, 0, l:width)
+        let l:suffix = l:width >= 4 ? '...' : ''
+        while strdisplaywidth(l:text . l:suffix) > l:width
+            let l:text = strcharpart(l:text, 0, strchars(l:text) - 1)
+        endwhile
+        let l:text .= l:suffix
+    endif
+    redraw
+    unsilent echo l:text
+    let l:info.echoed = 1
+endfunction
+
+function! s:QueueInsertDiagnosticEcho() abort
+    if get(g:, 'ale_echo_cursor', 1)
+        let s:insert_diagnostic_echo_timer = timer_start(max([0, g:ale_echo_delay]),
+                    \ function('s:EchoInsertDiagnostic', [bufnr(''), line('.'), b:changedtick]))
+    endif
+endfunction
+
 function! s:DiagnosticCheckStarted() abort
     " ALE exposes the requested buffer here, even for background buffers.
     let l:buffer = get(g:, 'ale_want_results_buffer', 0)
@@ -133,8 +184,13 @@ function! s:DiagnosticCheckStarted() abort
     endif
 endfunction
 
-function! s:HideEditingDiagnostics() abort
+function! s:RefreshInsertDiagnostics() abort
+    call s:StopInsertDiagnosticEcho()
     if !s:DiagnosticsEnabled() || mode(1) !~# '^i'
+        return
+    endif
+    if get(b:, 'linux_env_diagnostic_pending_row', 0) != line('.')
+        call s:QueueInsertDiagnosticEcho()
         return
     endif
     call s:ClearDiagnosticEcho()
@@ -183,33 +239,50 @@ function! s:DiagnosticEditEvent(check_line) abort
         call s:ClearDiagnosticEcho()
         silent ALEResetBuffer
         let b:linux_env_diagnostic_hidden_row = 0
+        let b:linux_env_diagnostic_pending_row = l:row
     endif
     let b:linux_env_diagnostic_edit_tick = l:tick
     let b:linux_env_diagnostic_row = l:row
+    " Merely revisiting a checked line keeps its diagnostic. A newly changed
+    " destination row (for example Enter followed by typing) is still pending.
+    if l:row != l:previous_row && get(b:, 'linux_env_diagnostic_pending_row', 0) != l:row
+        let b:linux_env_diagnostic_pending_row = 0
+    endif
     if a:check_line && l:row != l:previous_row && (l:tick != l:requested_tick
                 \ || get(b:, 'linux_env_diagnostic_hidden_row', 0))
         let b:linux_env_diagnostic_hidden_row = 0
         call ale#Queue(0)
     endif
-    call s:HideEditingDiagnostics()
+    call s:RefreshInsertDiagnostics()
 endfunction
 
 function! s:DiagnosticBufferEntered() abort
     let b:linux_env_diagnostic_row = line('.')
     let b:linux_env_diagnostic_edit_tick = b:changedtick
-    call s:HideEditingDiagnostics()
+    let b:linux_env_diagnostic_pending_row = 0
+    call s:RefreshInsertDiagnostics()
+endfunction
+
+function! s:DiagnosticInsertEnded() abort
+    call s:StopInsertDiagnosticEcho()
+    call s:ClearDiagnosticEcho()
+    let b:linux_env_diagnostic_pending_row = 0
 endfunction
 
 augroup linux_env_diagnostics
     autocmd!
     autocmd BufEnter * call <SID>DiagnosticBufferEntered()
     autocmd InsertEnter * call <SID>DiagnosticEditEvent(0)
+    autocmd InsertLeave,BufLeave * call <SID>DiagnosticInsertEnded()
+    if exists('##ModeChanged')
+        autocmd ModeChanged i*:n call <SID>DiagnosticInsertEnded()
+    endif
     autocmd TextChanged,TextChangedI,CursorMoved,CursorMovedI * call <SID>DiagnosticEditEvent(1)
     if exists('##TextChangedP')
         autocmd TextChangedP * call <SID>DiagnosticEditEvent(1)
     endif
     autocmd User ALEWantResults call <SID>DiagnosticCheckStarted()
-    autocmd User ALELintPost call <SID>HideEditingDiagnostics()
+    autocmd User ALELintPost call <SID>RefreshInsertDiagnostics()
 augroup END
 
 if executable('rg')

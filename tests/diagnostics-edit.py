@@ -75,9 +75,18 @@ def main():
                                             for item in s["loclist"]), "Initial warning missing")
             require(any(sign["lnum"] == 4 for sign in initial["signs"]),
                     "The compiler warning did not mark printf's use of a")
+            # Entering INSERT on an already diagnosed row without changing it
+            # must preserve its warning, including the real command-area text.
+            keys(b"4G$a")
+            untouched = wait_for(lambda s: "uninitialized" in " ".join(s["bottom"]),
+                                 "INSERT did not display an existing warning at the cursor")
+            on_row(untouched, 4)
+            require(untouched["loclist"] == initial["loclist"]
+                    and untouched["signs"] == initial["signs"],
+                    "Entering INSERT without an edit hid a previously diagnosed row")
             # A change operator deletes text before InsertEnter fires. Even
             # before typing the replacement, its old cross-line warning is stale.
-            keys(b"3Gcc")
+            keys(b"\x1b3Gcc")
             deleted = snapshot()
             on_row(deleted, 3)
             require(empty(deleted), "The cc deletion kept stale cross-line diagnostics")
@@ -113,7 +122,19 @@ def main():
             on_row(broken, 5)
             require(any(item["lnum"] == 4 for item in broken["loclist"]),
                     "The compiler error did not identify the previous row")
-            keys(b"\x1bOA\x05;")
+            # Returning with only an arrow key is navigation, not a fresh edit.
+            # Keep the checked row's signs, location list, and bottom message.
+            keys(b"\x1bOA")
+            revisited = wait_for(lambda s: "expected" in " ".join(s["bottom"])
+                                and ";" in " ".join(s["bottom"]),
+                                "Returning in INSERT lost the real compiler error message")
+            on_row(revisited, 4)
+            require(revisited["loclist"] == broken["loclist"]
+                    and revisited["signs"] == broken["signs"]
+                    and revisited["checks"] == broken["checks"],
+                    "Returning to a checked row hid its diagnostic or started another check: "
+                    + json.dumps(revisited))
+            keys(b"\x05;")
             repaired = snapshot()
             on_row(repaired, 4)
             require(empty(repaired), "Correcting printf kept its old error while in INSERT")
