@@ -339,7 +339,9 @@ function! s:DiagnosticEditEvent(check_line) abort
         call ale#engine#Stop(bufnr(''))
         let l:confirmed = deepcopy(get(b:, 'linux_env_diagnostic_confirmed', []))
         call s:DisplayDiagnostics(bufnr(''), l:confirmed, 1)
-        let b:linux_env_diagnostic_confirmed = l:confirmed
+        " ALE mutates its loclist in place as workers return. The confirmed
+        " snapshot must not alias that live list, even after moving its signs.
+        let b:linux_env_diagnostic_confirmed = deepcopy(l:confirmed)
         if !empty(filter(copy(l:confirmed), 's:DiagnosticAtRow(v:val, bufnr(""), l:row)'))
             let b:linux_env_diagnostic_correction_row = l:row
         endif
