@@ -23,6 +23,11 @@ function! s:Capture() abort
                 \ 'checking': ale#engine#IsCheckingBuffer(bufnr('')), 'bottom': l:bottom,
                 \ 'echoed': get(get(get(g:, 'ale_buffer_info', {}), bufnr(''), {}), 'echoed', 0),
                 \ 'pending_row': get(b:, 'linux_env_diagnostic_pending_row', 0),
+                \ 'confirmed': get(b:, 'linux_env_diagnostic_confirmed', []),
+                \ 'request_kind': get(b:, 'linux_env_diagnostic_request_kind', ''),
+                \ 'request_tick': get(b:, 'linux_env_diagnostic_request_tick', -1),
+                \ 'tick': b:changedtick, 'completed': get(b:, 'linux_env_diagnostic_completed', 0),
+                \ 'linted': get(b:, 'ale_linted', 0), 'messages': execute('messages'),
                 \ 'checks': filereadable(s:case.calls) ? len(readfile(s:case.calls)) : 0}
     call writefile([json_encode(l:state)], s:case.output . '.tmp')
     call rename(s:case.output . '.tmp', s:case.output)
