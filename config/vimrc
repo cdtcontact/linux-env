@@ -117,11 +117,16 @@ function! s:DiagnosticsEnabled() abort
                 \ && get(g:, 'ale_enabled', 1) && get(b:, 'ale_enabled', 1)
 endfunction
 
+let s:diagnostic_showmode_restore = -1
 function! s:ClearDiagnosticEcho() abort
     let l:info = get(get(g:, 'ale_buffer_info', {}), bufnr(''), {})
     if get(l:info, 'echoed', 0)
         echo ''
         let l:info.echoed = 0
+    endif
+    if s:diagnostic_showmode_restore != -1
+        let &showmode = s:diagnostic_showmode_restore
+        let s:diagnostic_showmode_restore = -1
     endif
 endfunction
 
@@ -164,6 +169,12 @@ function! s:EchoInsertDiagnostic(buffer, row, tick, timer) abort
         endwhile
         let l:text .= l:suffix
     endif
+    " Vim otherwise repaints -- INSERT -- over a timer's message immediately.
+    " Restore the user's mode display as soon as this diagnostic is cleared.
+    if s:diagnostic_showmode_restore == -1
+        let s:diagnostic_showmode_restore = &showmode
+    endif
+    set noshowmode
     redraw
     unsilent echo l:text
     let l:info.echoed = 1
