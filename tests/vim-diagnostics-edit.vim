@@ -21,6 +21,8 @@ function! s:Capture() abort
     let l:state = {'serial': s:serial, 'mode': mode(1), 'line': line('.'),
                 \ 'loclist': getloclist(0), 'signs': l:signs, 'lines': getline(1, '$'),
                 \ 'checking': ale#engine#IsCheckingBuffer(bufnr('')), 'bottom': l:bottom,
+                \ 'echoed': get(get(get(g:, 'ale_buffer_info', {}), bufnr(''), {}), 'echoed', 0),
+                \ 'pending_row': get(b:, 'linux_env_diagnostic_pending_row', 0),
                 \ 'checks': filereadable(s:case.calls) ? len(readfile(s:case.calls)) : 0}
     call writefile([json_encode(l:state)], s:case.output . '.tmp')
     call rename(s:case.output . '.tmp', s:case.output)

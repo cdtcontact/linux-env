@@ -59,6 +59,10 @@ def main():
             def wait_for(predicate, label):
                 end = time.monotonic() + 10
                 while time.monotonic() < end:
+                    # Let delayed diagnostic echo run while Vim is idle. A
+                    # tight stream of <Cmd> probes can continually redraw INSERT
+                    # or restart cursor timers before the 200 ms echo delay.
+                    settle(0.3)
                     state = snapshot()
                     if predicate(state):
                         return state
