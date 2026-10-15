@@ -78,7 +78,7 @@ let g:netrw_liststyle = 3
 let g:netrw_winsize = 25
 
 " Background diagnostics: installed by apt, with no plugin manager or LSP setup.
-" Check on open/save/InsertLeave, so checks do not interrupt insert-mode pairs.
+" Check completed lines, while clearing diagnostics invalidated by new edits.
 let g:ale_linters_explicit = 1
 let g:ale_linters = {'c': ['cc'], 'cpp': ['cc'], 'python': ['flake8']}
 let g:ale_c_cc_executable = 'clang'
@@ -93,6 +93,7 @@ let g:ale_lint_on_enter = 1
 let g:ale_lint_on_save = 1
 let g:ale_lint_on_insert_leave = 1
 let g:ale_lint_on_text_changed = 'never'
+let g:ale_lint_on_filetype_changed = 0
 let g:ale_sign_error = '>>'
 let g:ale_sign_warning = '!!'
 let g:ale_set_signs = 1
@@ -102,11 +103,114 @@ let g:ale_echo_delay = 200
 let g:ale_virtualtext_cursor = 0
 let g:ale_set_loclist = 1
 let g:ale_set_quickfix = 0
+" Refresh lists before returning, so an older deferred update cannot restore
+" diagnostics which the edit handlers below have just hidden or cleared.
+let g:ale_set_lists_synchronously = 1
 let g:ale_open_list = 0
 let g:ale_fix_on_save = 0
 let g:ale_completion_enabled = 0
 nnoremap <silent> ]d :ALENextWrap<CR>
 nnoremap <silent> [d :ALEPreviousWrap<CR>
+
+function! s:DiagnosticsEnabled() abort
+    return &buftype ==# '' && exists(':ALELint') == 2
+                \ && get(g:, 'ale_enabled', 1) && get(b:, 'ale_enabled', 1)
+endfunction
+
+function! s:ClearDiagnosticEcho() abort
+    let l:info = get(get(g:, 'ale_buffer_info', {}), bufnr(''), {})
+    if get(l:info, 'echoed', 0)
+        echo ''
+        let l:info.echoed = 0
+    endif
+endfunction
+
+function! s:DiagnosticCheckStarted() abort
+    " ALE exposes the requested buffer here, even for background buffers.
+    let l:buffer = get(g:, 'ale_want_results_buffer', 0)
+    if l:buffer > 0
+        call setbufvar(l:buffer, 'linux_env_diagnostic_request_tick', getbufvar(l:buffer, 'changedtick'))
+    endif
+endfunction
+
+function! s:HideEditingDiagnostics() abort
+    if !s:DiagnosticsEnabled() || mode(1) !~# '^i'
+        return
+    endif
+    call s:ClearDiagnosticEcho()
+    let l:buffer = bufnr('')
+    let l:info = get(get(g:, 'ale_buffer_info', {}), l:buffer, {})
+    if empty(l:info)
+        return
+    endif
+    let l:row = line('.')
+    let l:visible = filter(copy(l:info.loclist),
+                \ 'get(v:val, "bufnr", l:buffer) != l:buffer || v:val.lnum > l:row'
+                \ . ' || max([v:val.lnum, get(v:val, "end_lnum", 0)]) < l:row')
+    if len(l:visible) == len(l:info.loclist)
+        return
+    endif
+    " ALE has no line-filter hook. Keep its cached results and all displays in
+    " agreement, without recursively emitting another ALELintPost event.
+    let l:info.loclist = l:visible
+    let b:linux_env_diagnostic_hidden_row = 1
+    if g:ale_set_signs
+        call ale#sign#SetSigns(l:buffer, l:visible)
+    endif
+    if g:ale_set_highlights
+        call ale#highlight#SetHighlights(l:buffer, l:visible)
+    endif
+    if g:ale_set_loclist || g:ale_set_quickfix
+        call ale#list#SetLists(l:buffer, l:visible)
+    endif
+    if exists('*ale#statusline#Update')
+        call ale#statusline#Update(l:buffer, l:visible)
+    endif
+endfunction
+
+function! s:DiagnosticEditEvent(check_line) abort
+    if !s:DiagnosticsEnabled()
+        return
+    endif
+    let l:tick = b:changedtick
+    let l:row = line('.')
+    let l:previous_row = get(b:, 'linux_env_diagnostic_row', l:row)
+    let l:requested_tick = get(b:, 'linux_env_diagnostic_request_tick', -1)
+    if l:tick != get(b:, 'linux_env_diagnostic_edit_tick', l:tick)
+                \ && l:tick != l:requested_tick
+        " Editing a declaration can invalidate warnings elsewhere in the file.
+        " Reset all results and cancel jobs instead of moving stale error signs.
+        call s:ClearDiagnosticEcho()
+        silent ALEResetBuffer
+        let b:linux_env_diagnostic_hidden_row = 0
+    endif
+    let b:linux_env_diagnostic_edit_tick = l:tick
+    let b:linux_env_diagnostic_row = l:row
+    if a:check_line && l:row != l:previous_row && (l:tick != l:requested_tick
+                \ || get(b:, 'linux_env_diagnostic_hidden_row', 0))
+        let b:linux_env_diagnostic_hidden_row = 0
+        call ale#Queue(0)
+    endif
+    call s:HideEditingDiagnostics()
+endfunction
+
+function! s:DiagnosticBufferEntered() abort
+    let b:linux_env_diagnostic_row = line('.')
+    let b:linux_env_diagnostic_edit_tick = b:changedtick
+    call s:HideEditingDiagnostics()
+endfunction
+
+augroup linux_env_diagnostics
+    autocmd!
+    autocmd BufEnter * call <SID>DiagnosticBufferEntered()
+    autocmd InsertEnter * call <SID>DiagnosticEditEvent(0)
+    autocmd TextChanged,TextChangedI,CursorMoved,CursorMovedI * call <SID>DiagnosticEditEvent(1)
+    if exists('##TextChangedP')
+        autocmd TextChangedP * call <SID>DiagnosticEditEvent(1)
+    endif
+    autocmd User ALEWantResults call <SID>DiagnosticCheckStarted()
+    autocmd User ALELintPost call <SID>HideEditingDiagnostics()
+augroup END
 
 if executable('rg')
     set grepprg=rg\ --vimgrep\ --smart-case\ --
