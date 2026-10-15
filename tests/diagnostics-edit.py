@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check real insert-mode edits, row changes, and cancellation of old ALE jobs."""
+"""Check persistent INSERT diagnostics, row changes, and stale ALE jobs."""
 import json
 import os
 from pathlib import Path
@@ -20,7 +20,7 @@ def main():
         calls, delay = root / "checks", root / "delay"
         compiler = root / "clang"
         # A real compiler behind a tiny delay/count wrapper lets the test prove
-        # that typing does not start jobs and a superseded result cannot return.
+        # that fresh rows wait, confirmed errors refresh, and old jobs cannot win.
         compiler.write_text('#!/bin/sh\nprintf "check\\n" >> ' + shlex.quote(str(calls))
                             + '\nif [ -f ' + shlex.quote(str(delay)) + ' ]; then sleep 2; fi\n'
                             + 'exec /usr/bin/clang "$@"\n')
@@ -75,6 +75,15 @@ def main():
                 require(state["mode"].startswith("i") and state["line"] == row,
                         "The edit unexpectedly left INSERT or changed row: " + json.dumps(state))
 
+            def marked(state, row):
+                return (any(item["lnum"] == row for item in state["loclist"])
+                        and any(sign["lnum"] == row for sign in state["signs"]))
+
+            def error_marked(state, row):
+                return (any(item["type"] == "E" and item["lnum"] == row
+                            for item in state["loclist"])
+                        and any(sign["lnum"] == row for sign in state["signs"]))
+
             initial = wait_for(lambda s: any("uninitialized" in item["text"]
                                             for item in s["loclist"]), "Initial warning missing")
             require(any(sign["lnum"] == 4 for sign in initial["signs"]),
@@ -88,21 +97,26 @@ def main():
             require(untouched["loclist"] == initial["loclist"]
                     and untouched["signs"] == initial["signs"],
                     "Entering INSERT without an edit hid a previously diagnosed row")
-            # A change operator deletes text before InsertEnter fires. Even
-            # before typing the replacement, its old cross-line warning is stale.
+            # A change operator deletes text before InsertEnter fires. Keep the
+            # confirmed cross-line warning until a real result verifies the fix.
             keys(b"\x1b3Gcc")
             deleted = snapshot()
             on_row(deleted, 3)
-            require(empty(deleted), "The cc deletion kept stale cross-line diagnostics")
-            keys(b"int a = 0;")
-            fixed = snapshot()
+            require(marked(deleted, 4), "The cc deletion erased another row's confirmed warning")
+            keys(b"int a")
+            partial = snapshot()
+            on_row(partial, 3)
+            require(marked(partial, 4), "An unfinished declaration erased the existing warning")
+            keys(b" = 0;")
+            fixed = wait_for(lambda s: empty(s) and s["checks"] > initial["checks"]
+                             and not s["checking"],
+                             "A correct declaration did not clear its cross-line warning in INSERT")
             on_row(fixed, 3)
-            require("int a = 0;" in fixed["lines"][2] and empty(fixed),
-                    "A real INSERT edit kept stale cross-line diagnostics: " + json.dumps(fixed))
+            require("int a = 0;" in fixed["lines"][2], "The declaration was not repaired")
 
             keys(b"\x1bOB")  # Actual terminal Down key, without leaving INSERT.
-            clean = wait_for(lambda s: s["checks"] > initial["checks"] and not s["checking"],
-                             "Moving to the next row did not check the corrected buffer")
+            clean = wait_for(lambda s: empty(s) and not s["checking"],
+                             "Moving to the next row restored a corrected warning")
             on_row(clean, 4)
             require(empty(clean), "The corrected buffer still reported a compiler warning")
             # Remove printf's semicolon, then pause on that same editing row.
@@ -126,57 +140,91 @@ def main():
             on_row(broken, 5)
             require(any(item["lnum"] == 4 for item in broken["loclist"]),
                     "The compiler error did not identify the previous row")
+            keys(b"\x1bi")
+            resumed = snapshot()
+            on_row(resumed, 5)
+            require(error_marked(resumed, 4),
+                    "Re-entering INSERT on another row hid the confirmed error")
+            # Spaces and arbitrary code on a different row must not clear the
+            # confirmed error. New errors on that unfinished row stay hidden,
+            # including when they prevent the compiler from reporting old ones.
+            keys(b"\x05 ")
+            unrelated_space = snapshot()
+            on_row(unrelated_space, 5)
+            require(error_marked(unrelated_space, 4),
+                    "A space on another row hid the confirmed printf error")
+            keys(b"invalid")
+            unrelated = wait_for(lambda s: s["checks"] > broken["checks"] and not s["checking"],
+                                 "Typing with a confirmed error did not refresh diagnostics")
+            on_row(unrelated, 5)
+            require(error_marked(unrelated, 4)
+                    and not any(item["lnum"] == 5 for item in unrelated["loclist"]),
+                    "An unfinished different row hid the old error or showed new errors: "
+                    + json.dumps(unrelated))
+            keys(b"\x7f" * len("invalid"))
+            unrelated_repaired = wait_for(lambda s: s["checks"] > unrelated["checks"]
+                                          and not s["checking"],
+                                          "Repairing the unrelated row was not checked")
+            require(error_marked(unrelated_repaired, 4),
+                    "Repairing another row cleared printf's real error")
+
+            # Inserting text before a diagnosed line must move its marker and
+            # location-list entry with that line, even before the next result.
+            keys(b"\x1b3Go")
+            shifted = snapshot()
+            on_row(shifted, 4)
+            require(error_marked(shifted, 5),
+                    "A new line above printf left its diagnostic on the wrong row: "
+                    + json.dumps(shifted))
+            keys(b"// edit another line")
+            shifted = wait_for(lambda s: s["checks"] > unrelated_repaired["checks"]
+                               and not s["checking"], "The shifted error was not refreshed")
+            require(error_marked(shifted, 5), "Typing on an inserted row hid the shifted error")
             # Returning with only an arrow key is navigation, not a fresh edit.
             # Keep the checked row's signs, location list, and bottom message.
-            keys(b"\x1bOA")
+            keys(b"\x1bOB")
             revisited = wait_for(lambda s: "expected" in " ".join(s["bottom"])
                                 and ";" in " ".join(s["bottom"]),
                                 "Returning in INSERT lost the real compiler error message")
-            on_row(revisited, 4)
-            require(revisited["loclist"] == broken["loclist"]
-                    and revisited["signs"] == broken["signs"]
-                    and revisited["checks"] == broken["checks"],
-                    "Returning to a checked row hid its diagnostic or started another check: "
-                    + json.dumps(revisited))
-            keys(b"\x05;")
-            repaired = snapshot()
-            on_row(repaired, 4)
-            require(empty(repaired), "Correcting printf kept its old error while in INSERT")
-            keys(b"\x1bOB")
-            refreshed = wait_for(lambda s: s["checks"] > broken["checks"] and not s["checking"],
-                                 "Corrected code was not rechecked on a row change")
-            require(empty(refreshed), "Corrected printf did not clear diagnostics")
+            on_row(revisited, 5)
+            require(error_marked(revisited, 5), "Returning to printf hid its confirmed error")
 
+            # A still-incorrect edit keeps the error. Start a slow result, then
+            # fix that same row before it finishes: only a current, successful
+            # check may clear the old error, without leaving INSERT or the row.
             delay.touch()
-            keys(b"\x1bOA")
-            keys(b"\x05\x7f")
-            keys(b"\x1bOB")
-            started = wait_for(lambda s: s["checks"] > refreshed["checks"] and s["checking"],
-                               "Delayed compiler job did not start")
+            keys(b"\x05 ")
+            still_wrong = snapshot()
+            on_row(still_wrong, 5)
+            require(error_marked(still_wrong, 5),
+                    "An incomplete edit on the error row prematurely erased its diagnostic")
+            started = wait_for(lambda s: s["checks"] > revisited["checks"] and s["checking"],
+                               "The existing error did not trigger a delayed same-row recheck")
             on_row(started, 5)
-            keys(b" ")  # Invalidate that job from a different row while it is running.
+            require(error_marked(started, 5), "The error disappeared while its recheck was running")
+            keys(b";")
+            pending_fix = snapshot()
+            on_row(pending_fix, 5)
+            require(error_marked(pending_fix, 5),
+                    "Typing a fix cleared the diagnostic before a compiler verified it")
+            repaired = wait_for(lambda s: empty(s) and s["checks"] > started["checks"]
+                                and not s["checking"],
+                                "A verified fix did not clear the error on the same INSERT row")
+            on_row(repaired, 5)
             settle(2.5)
             stale = snapshot()
             on_row(stale, 5)
             require(empty(stale), "A cancelled checker restored stale errors: " + json.dumps(stale))
             delay.unlink()
-            keys(b"\x1bOA")
-            keys(b"\x1bOB")
-            final = wait_for(lambda s: any(item["type"] == "E" for item in s["loclist"])
-                            and not s["checking"], "A fresh row change did not restore checking")
-            on_row(final, 5)
-            keys(b"\x1bOA\x05;")
-            corrected = snapshot()
-            require(empty(corrected), "Final INSERT correction did not clear the error")
             keys(b"\x05\r")  # The native paired Enter mapping must also trigger a row check.
-            entered = wait_for(lambda s: s["checks"] > corrected["checks"] and not s["checking"],
+            entered = wait_for(lambda s: s["checks"] > repaired["checks"] and not s["checking"],
                                "A real INSERT Enter did not check the corrected buffer")
-            on_row(entered, 5)
+            on_row(entered, 6)
             require(empty(entered), "A real INSERT Enter restored an obsolete error")
             keys(b"\x1b:qall!\r")
             terminal.finish()
         require(source.read_text() == original, "Background checks rewrote the source on disk")
-    print("[diagnostics edit test] Real INSERT edits, row checks, and stale-job cancellation passed",
+    print("[diagnostics edit test] Persistent errors, live repairs, row checks, and stale jobs passed",
           flush=True)
 
 

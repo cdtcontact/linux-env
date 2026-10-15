@@ -78,7 +78,7 @@ let g:netrw_liststyle = 3
 let g:netrw_winsize = 25
 
 " Background diagnostics: installed by apt, with no plugin manager or LSP setup.
-" Check completed lines, while clearing diagnostics invalidated by new edits.
+" Check completed lines; retain confirmed problems until a fresh check fixes them.
 let g:ale_linters_explicit = 1
 let g:ale_linters = {'c': ['cc'], 'cpp': ['cc'], 'python': ['flake8']}
 let g:ale_c_cc_executable = 'clang'
@@ -192,46 +192,127 @@ function! s:DiagnosticCheckStarted() abort
     let l:buffer = get(g:, 'ale_want_results_buffer', 0)
     if l:buffer > 0
         call setbufvar(l:buffer, 'linux_env_diagnostic_request_tick', getbufvar(l:buffer, 'changedtick'))
+        call setbufvar(l:buffer, 'linux_env_diagnostic_request_kind',
+                    \ getbufvar(l:buffer, 'linux_env_diagnostic_next_kind', 'full'))
+        call setbufvar(l:buffer, 'linux_env_diagnostic_next_kind', 'full')
+    endif
+endfunction
+
+function! s:DiagnosticAtRow(item, buffer, row) abort
+    return get(a:item, 'bufnr', a:buffer) == a:buffer && a:item.lnum <= a:row
+                \ && max([a:item.lnum, get(a:item, 'end_lnum', 0)]) >= a:row
+endfunction
+
+function! s:DisplayDiagnostics(buffer, items, follow_signs) abort
+    let l:info = get(get(g:, 'ale_buffer_info', {}), a:buffer, {})
+    if empty(l:info)
+        return
+    endif
+    " Existing ALE sign IDs track Vim's line insertions/deletions. Follow them
+    " before repainting, and move the end of a multiline highlight as well.
+    let l:positions = map(copy(a:items), '[v:val, v:val.lnum]')
+    if g:ale_set_signs
+        call ale#sign#SetSigns(a:buffer, a:items)
+        if a:follow_signs
+            for [l:item, l:old_row] in l:positions
+                if get(l:item, 'end_lnum', 0) > 0
+                    let l:item.end_lnum = max([l:item.lnum, l:item.end_lnum + l:item.lnum - l:old_row])
+                endif
+            endfor
+        endif
+    endif
+    " Keep ALE's cache, navigation, signs and list in agreement. Calling
+    " engine#SetResults here would recursively emit another ALELintPost.
+    let l:info.loclist = a:items
+    if g:ale_set_highlights
+        call ale#highlight#SetHighlights(a:buffer, a:items)
+    endif
+    if g:ale_set_loclist || g:ale_set_quickfix
+        call ale#list#SetLists(a:buffer, a:items)
+    endif
+    if exists('*ale#statusline#Update')
+        call ale#statusline#Update(a:buffer, a:items)
     endif
 endfunction
 
 function! s:RefreshInsertDiagnostics() abort
     call s:StopInsertDiagnosticEcho()
-    if !s:DiagnosticsEnabled() || mode(1) !~# '^i'
-        return
-    endif
-    if get(b:, 'linux_env_diagnostic_pending_row', 0) != line('.')
+    if s:DiagnosticsEnabled() && mode(1) =~# '^i'
         call s:QueueInsertDiagnosticEcho()
+    endif
+endfunction
+
+function! s:DiagnosticResults() abort
+    " ALELintPost has no buffer argument in the oldest supported ALE. The lint
+    " counter identifies completed buffers, including one checked in background.
+    for l:key in keys(get(g:, 'ale_buffer_info', {}))
+        let l:buffer = str2nr(l:key)
+        let l:count = getbufvar(l:buffer, 'ale_linted', 0)
+        if l:buffer <= 0 || l:count == getbufvar(l:buffer, 'linux_env_diagnostic_completed', 0)
+            continue
+        endif
+        call setbufvar(l:buffer, 'linux_env_diagnostic_completed', l:count)
+        let l:info = g:ale_buffer_info[l:key]
+        let l:old = deepcopy(getbufvar(l:buffer, 'linux_env_diagnostic_confirmed', []))
+        if getbufvar(l:buffer, 'linux_env_diagnostic_request_tick', -1) != getbufvar(l:buffer, 'changedtick')
+            " A superseded worker must never restore an obsolete error or clear
+            " an error using results from a different version of the buffer.
+            call s:DisplayDiagnostics(l:buffer, l:old, 0)
+            call setbufvar(l:buffer, 'linux_env_diagnostic_confirmed', deepcopy(l:old))
+            continue
+        endif
+        let l:visible = deepcopy(l:info.loclist)
+        let l:pending = getbufvar(l:buffer, 'linux_env_diagnostic_pending_row', 0)
+        let l:kind = getbufvar(l:buffer, 'linux_env_diagnostic_request_kind', 'full')
+        if l:buffer == bufnr('') && mode(1) =~# '^i' && l:pending > 0
+            if l:kind ==# 'edit' && !empty(filter(copy(l:visible), 'v:val.type ==# "E"'))
+                " Half-written new code can stop a compiler before it reaches
+                " old errors. Keep confirmed results until leaving this row, or
+                " until a successful check proves the buffer has no errors.
+                let l:visible = l:old
+            else
+                call filter(l:visible, '!s:DiagnosticAtRow(v:val, l:buffer, l:pending)')
+            endif
+            call setbufvar(l:buffer, 'linux_env_diagnostic_hidden_row', 1)
+        elseif l:buffer == bufnr('') && mode(1) =~# '^i' && l:kind ==# 'edit'
+            let l:correction = get(b:, 'linux_env_diagnostic_correction_row', 0)
+            if !empty(filter(copy(l:visible), 'v:val.type ==# "E" && s:DiagnosticAtRow(v:val, l:buffer, l:correction)'))
+                " An unfinished repair can also stop parsing before other known
+                " errors. Retain those until this repair or a full check finishes.
+                for l:item in l:old
+                    if l:item.type ==# 'E' && !s:DiagnosticAtRow(l:item, l:buffer, l:correction)
+                                \ && empty(filter(copy(l:visible), 's:DiagnosticAtRow(v:val, l:buffer, l:item.lnum)'))
+                        call add(l:visible, l:item)
+                    endif
+                endfor
+                call sort(l:visible, 'ale#util#LocItemCompare')
+            endif
+        endif
+        call s:DisplayDiagnostics(l:buffer, l:visible, 0)
+        call setbufvar(l:buffer, 'linux_env_diagnostic_confirmed', deepcopy(l:visible))
+    endfor
+    if mode(1) =~# '^i'
+        call s:ClearDiagnosticEcho()
+        call s:RefreshInsertDiagnostics()
+    endif
+endfunction
+
+function! s:StopDiagnosticCheck() abort
+    let l:timer = get(b:, 'linux_env_diagnostic_timer', -1)
+    if l:timer != -1
+        call timer_stop(l:timer)
+        let b:linux_env_diagnostic_timer = -1
+    endif
+endfunction
+
+function! s:CheckEditedDiagnostics(buffer, tick, timer) abort
+    if getbufvar(a:buffer, 'linux_env_diagnostic_timer', -1) != a:timer
         return
     endif
-    call s:ClearDiagnosticEcho()
-    let l:buffer = bufnr('')
-    let l:info = get(get(g:, 'ale_buffer_info', {}), l:buffer, {})
-    if empty(l:info)
-        return
-    endif
-    let l:row = line('.')
-    let l:visible = filter(copy(l:info.loclist),
-                \ 'get(v:val, "bufnr", l:buffer) != l:buffer || v:val.lnum > l:row'
-                \ . ' || max([v:val.lnum, get(v:val, "end_lnum", 0)]) < l:row')
-    if len(l:visible) == len(l:info.loclist)
-        return
-    endif
-    " ALE has no line-filter hook. Keep its cached results and all displays in
-    " agreement, without recursively emitting another ALELintPost event.
-    let l:info.loclist = l:visible
-    let b:linux_env_diagnostic_hidden_row = 1
-    if g:ale_set_signs
-        call ale#sign#SetSigns(l:buffer, l:visible)
-    endif
-    if g:ale_set_highlights
-        call ale#highlight#SetHighlights(l:buffer, l:visible)
-    endif
-    if g:ale_set_loclist || g:ale_set_quickfix
-        call ale#list#SetLists(l:buffer, l:visible)
-    endif
-    if exists('*ale#statusline#Update')
-        call ale#statusline#Update(l:buffer, l:visible)
+    call setbufvar(a:buffer, 'linux_env_diagnostic_timer', -1)
+    if bufnr('') == a:buffer && b:changedtick == a:tick && s:DiagnosticsEnabled()
+        let b:linux_env_diagnostic_next_kind = 'edit'
+        call ale#Queue(0)
     endif
 endfunction
 
@@ -243,26 +324,40 @@ function! s:DiagnosticEditEvent(check_line) abort
     let l:row = line('.')
     let l:previous_row = get(b:, 'linux_env_diagnostic_row', l:row)
     let l:requested_tick = get(b:, 'linux_env_diagnostic_request_tick', -1)
-    if l:tick != get(b:, 'linux_env_diagnostic_edit_tick', l:tick)
-                \ && l:tick != l:requested_tick
-        " Editing a declaration can invalidate warnings elsewhere in the file.
-        " Reset all results and cancel jobs instead of moving stale error signs.
+    let l:changed = l:tick != get(b:, 'linux_env_diagnostic_edit_tick', l:tick)
+    if l:row != l:previous_row
+        let b:linux_env_diagnostic_pending_row = 0
+        let b:linux_env_diagnostic_correction_row = 0
+    endif
+    if l:changed || l:row != l:previous_row
         call s:ClearDiagnosticEcho()
-        silent ALEResetBuffer
-        let b:linux_env_diagnostic_hidden_row = 0
-        let b:linux_env_diagnostic_pending_row = l:row
+        call s:StopDiagnosticCheck()
+    endif
+    if l:changed && l:tick != l:requested_tick
+        " Cancel obsolete workers WITHOUT clearing signs. A keystroke is not
+        " evidence that an existing error was fixed.
+        call ale#engine#Stop(bufnr(''))
+        let l:confirmed = deepcopy(get(b:, 'linux_env_diagnostic_confirmed', []))
+        call s:DisplayDiagnostics(bufnr(''), l:confirmed, 1)
+        let b:linux_env_diagnostic_confirmed = l:confirmed
+        if !empty(filter(copy(l:confirmed), 's:DiagnosticAtRow(v:val, bufnr(""), l:row)'))
+            let b:linux_env_diagnostic_correction_row = l:row
+        endif
+        let b:linux_env_diagnostic_pending_row = get(b:, 'linux_env_diagnostic_correction_row', 0) == l:row ? 0 : l:row
     endif
     let b:linux_env_diagnostic_edit_tick = l:tick
     let b:linux_env_diagnostic_row = l:row
-    " Merely revisiting a checked line keeps its diagnostic. A newly changed
-    " destination row (for example Enter followed by typing) is still pending.
-    if l:row != l:previous_row && get(b:, 'linux_env_diagnostic_pending_row', 0) != l:row
-        let b:linux_env_diagnostic_pending_row = 0
-    endif
     if a:check_line && l:row != l:previous_row && (l:tick != l:requested_tick
                 \ || get(b:, 'linux_env_diagnostic_hidden_row', 0))
         let b:linux_env_diagnostic_hidden_row = 0
+        let b:linux_env_diagnostic_next_kind = 'line'
         call ale#Queue(0)
+    elseif l:changed && (!empty(get(b:, 'linux_env_diagnostic_confirmed', []))
+                \ || get(b:, 'linux_env_diagnostic_correction_row', 0) > 0 || mode(1) !~# '^i')
+        " While fixing a confirmed issue, check after a short typing pause even
+        " on this same row. New, undiagnosed rows stay quiet until completed.
+        let b:linux_env_diagnostic_timer = timer_start(400,
+                    \ function('s:CheckEditedDiagnostics', [bufnr(''), l:tick]))
     endif
     call s:RefreshInsertDiagnostics()
 endfunction
@@ -275,9 +370,11 @@ function! s:DiagnosticBufferEntered() abort
 endfunction
 
 function! s:DiagnosticInsertEnded() abort
+    call s:StopDiagnosticCheck()
     call s:StopInsertDiagnosticEcho()
     call s:ClearDiagnosticEcho()
     let b:linux_env_diagnostic_pending_row = 0
+    let b:linux_env_diagnostic_correction_row = 0
 endfunction
 
 augroup linux_env_diagnostics
@@ -293,7 +390,7 @@ augroup linux_env_diagnostics
         autocmd TextChangedP * call <SID>DiagnosticEditEvent(1)
     endif
     autocmd User ALEWantResults call <SID>DiagnosticCheckStarted()
-    autocmd User ALELintPost call <SID>RefreshInsertDiagnostics()
+    autocmd User ALELintPost call <SID>DiagnosticResults()
 augroup END
 
 if executable('rg')
