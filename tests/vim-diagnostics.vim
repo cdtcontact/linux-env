@@ -18,6 +18,15 @@ function! s:WaitForLint(previous) abort
     endwhile
 endfunction
 
+function! s:LeaveInsert() abort
+    " ALE 4 uses ModeChanged on recent Vim; older releases use InsertLeave.
+    if exists('#ALEEvents#ModeChanged')
+        doautocmd <nomodeline> ModeChanged i:n
+    else
+        doautocmd <nomodeline> InsertLeave
+    endif
+endfunction
+
 function! s:State() abort
     let l:signs = sign_getplaced(bufnr(''), {'group': '*'})[0].signs
     call filter(l:signs, 'v:val.name =~# "^ALE" && v:val.name !=# "ALEDummySign"')
@@ -44,7 +53,7 @@ try
     if has_key(s:case, 'warning')
         call setline(1, s:case.warning)
         let s:before = g:diagnostic_lint_posts
-        doautocmd <nomodeline> InsertLeave
+        call s:LeaveInsert()
         call s:WaitForLint(s:before)
         let s:result.warning = s:State()
     endif
@@ -53,7 +62,7 @@ try
     " contents, and that the normal leave-insert-mode event refreshes results.
     call setline(1, s:case.fixed)
     let s:before = g:diagnostic_lint_posts
-    doautocmd <nomodeline> InsertLeave
+    call s:LeaveInsert()
     call s:WaitForLint(s:before)
     let s:result.fixed = s:State()
     let s:result.disk_after_bufferlint = readfile(s:case.path)
