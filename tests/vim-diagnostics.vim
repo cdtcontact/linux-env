@@ -34,8 +34,7 @@ endfunction
 function! s:State() abort
     let l:signs = sign_getplaced(bufnr(''), {'group': '*'})[0].signs
     call filter(l:signs, 'v:val.name =~# "^ALE" && v:val.name !=# "ALEDummySign"')
-    return {'loclist': getloclist(0), 'signs': l:signs,
-                \ 'ale_info': execute('ALEInfo'), 'filetype': &filetype}
+    return {'loclist': getloclist(0), 'signs': l:signs, 'filetype': &filetype}
 endfunction
 
 try

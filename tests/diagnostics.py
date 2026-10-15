@@ -5,7 +5,19 @@ from pathlib import Path
 import shlex
 import tempfile
 
-from identity import REPO, require, run
+from identity import REPO, Terminal, require, run
+
+
+def test_plugin_startup(root):
+    record = root / "startup.txt"
+    # A normal terminal launch must load ALE without the explicit runtime call
+    # needed by the Ex-mode checker fixture below.
+    with Terminal(["vim", "-Nu", str(REPO / "config/vimrc"), "-i", "NONE", "-n",
+                   "-c", "call writefile([string(exists(':ALELint'))], '" + str(record) + "')",
+                   "-c", "qall!"]) as terminal:
+        terminal.finish()
+    require(record.read_text().strip() == "2", "Normal Vim startup did not load ALE")
+    print("[diagnostics test] Normal terminal Vim startup loaded ALE", flush=True)
 
 
 def test_diagnostics(root, extension, syntax_error=False):
@@ -91,6 +103,7 @@ def test_diagnostics(root, extension, syntax_error=False):
 def main():
     with tempfile.TemporaryDirectory(prefix="linux-env-diagnostics-") as temporary:
         root = Path(temporary)
+        test_plugin_startup(root)
         for extension in ("c", "cpp", "py"):
             test_diagnostics(root, extension)
         test_diagnostics(root, "py", syntax_error=True)
