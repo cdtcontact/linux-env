@@ -10,9 +10,16 @@ fi
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/linux-env-doctor.XXXXXXXX")"
 trap 'rm -rf -- "$WORK_DIR"' EXIT
 trap 'printf "[FAIL] 自检失败（第 %s 行）；请查看上方错误。\n" "$LINENO" >&2' ERR
-for cmd in gcc g++ clang clangd clang-format clang-tidy cmake ninja gdb pkg-config python3 pipx git zsh vim tmux rg fzf ctags shellcheck script; do
-  command -v "$cmd" >/dev/null || { printf '[FAIL] 缺少命令: %s\n' "$cmd" >&2; exit 1; }
+for cmd in gcc g++ clang clang++ clangd clang-format clang-tidy cmake ninja gdb pkg-config python3 pipx flake8 git zsh vim tmux rg fzf ctags shellcheck script; do
+  command -v "$cmd" >/dev/null || {
+    printf '[FAIL] 缺少命令: %s；请不带 --skip-packages 重新运行安装器。\n' "$cmd" >&2
+    exit 1
+  }
 done
+[[ -r /usr/share/vim-ale/plugin/ale.vim ]] || {
+  printf '[FAIL] 缺少 Vim ALE 插件；请不带 --skip-packages 重新运行安装器。\n' >&2
+  exit 1
+}
 printf '#include <stdio.h>\nint main(void) { puts("C OK"); return 0; }\n' > "$WORK_DIR/main.c"
 gcc -std=c17 -Wall -Wextra -Werror "$WORK_DIR/main.c" -o "$WORK_DIR/hello-c"
 "$WORK_DIR/hello-c"
@@ -24,5 +31,8 @@ python3 -m venv "$WORK_DIR/venv"
 "$WORK_DIR/venv/bin/python" -m pip --version
 zsh -n "$HOME/.zshrc"
 TERM=xterm-256color script -qefc "zsh -ic 'print -r -- \"Zsh OK\"'" /dev/null
-vim -Nu "$HOME/.vimrc" -i NONE -n -es +'qall!'
-printf '[OK] C/C++、Python venv、Zsh、Vim 自检通过。\n'
+if ! vim -Nu "$HOME/.vimrc" -i NONE -n -es +'runtime plugin/ale.vim' +'if exists(":ALELint") != 2 | cquit 1 | endif' +'qall!'; then
+  printf '[FAIL] Vim 配置加载失败或 ALE 未加载；请不带 --skip-packages 重新运行安装器。\n' >&2
+  exit 1
+fi
+printf '[OK] C/C++、Python venv、Zsh、Vim 与 ALE 代码诊断自检通过。\n'

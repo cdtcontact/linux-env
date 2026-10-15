@@ -138,4 +138,5 @@ note 'Exercise identity setup with a real controlling terminal and private passw
 python3 "$repo_root/tests/identity.py"
 python3 "$repo_root/tests/editor.py"
 python3 "$repo_root/tests/sudo-suggestions.py"
+python3 "$repo_root/tests/diagnostics.py"
 printf '\nAll Ubuntu integration checks passed.\n'

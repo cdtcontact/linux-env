@@ -97,8 +97,8 @@ if (( ! SKIP_PACKAGES )); then
     ca-certificates git curl wget file unzip zip locales bsdutils sudo hostname passwd
     build-essential clang clangd clang-format clang-tidy cmake ninja-build
     gdb pkg-config man-db manpages-dev universal-ctags
-    python3 python3-dev python3-pip python3-venv pipx
-    vim zsh tmux ripgrep fzf shellcheck
+    python3 python3-dev python3-pip python3-venv pipx flake8
+    vim vim-ale zsh tmux ripgrep fzf shellcheck
     zsh-autosuggestions zsh-syntax-highlighting
   )
   apt-get "${apt_options[@]}" install -y --no-install-recommends "${packages[@]}"
@@ -114,9 +114,10 @@ if (( ! SKIP_PACKAGES )); then
     apt-get "${apt_options[@]}" install -y --no-install-recommends valgrind
   fi
 fi
-for cmd in git zsh vim tmux python3 gcc g++ cmake ninja gdb clang clangd clang-format clang-tidy pkg-config pipx rg fzf ctags shellcheck runuser passwd useradd usermod hostname; do
+for cmd in git zsh vim tmux python3 gcc g++ cmake ninja gdb clang clang++ clangd clang-format clang-tidy pkg-config pipx flake8 rg fzf ctags shellcheck runuser passwd useradd usermod hostname; do
   command -v "$cmd" >/dev/null || die "缺少 $cmd；去掉 --skip-packages 后重试。"
 done
+[[ -r /usr/share/vim-ale/plugin/ale.vim ]] || die '缺少 Vim ALE 插件（vim-ale）；去掉 --skip-packages 后重试。'
 if [[ "$INTERACTIVE" == yes ]]; then apply_account; fi
 resolve_target_account
 if [[ -n "$NEW_HOSTNAME" ]]; then apply_hostname "$NEW_HOSTNAME"; fi

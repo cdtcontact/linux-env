@@ -58,26 +58,26 @@ bash init_env.sh --user alice
 
 安装器会更新 APT 索引并安装所需软件包，**不会执行系统升级或自动清理**；上面的 `apt upgrade` 和 `apt autoremove` 由你决定是否运行。
 
-已有环境无需重装 Ubuntu，也不必重装软件包。按上面的 GitHub 或 Gitee 地址重新下载对应平台的入口后，在 root 终端只更新配置即可：
+已有环境无需重装 Ubuntu。按上面的 GitHub 或 Gitee 地址重新下载对应平台的入口后，在 root 终端更新即可；这次新增的 Vim 代码诊断需要安装 `vim-ale` 和 `flake8`，请不要加 `--skip-packages`：
 
 ```bash
-bash init_env.sh --non-interactive --user peacecdt --skip-packages
+bash init_env.sh --non-interactive --user peacecdt
 su - peacecdt
 ```
 
-`peacecdt` 替换为实际使用的开发用户名。这会保留主机名和密码，更新前自动备份旧配置；不删除学习项目。必须进入新的 Zsh 会话（上面的 `su -` 或重新登录）才能加载终端补全修复，Vim 配置在重新打开 Vim 后生效。仅下载入口或在已有终端继续输入命令，不会重新加载配置。
+`peacecdt` 替换为实际使用的开发用户名。这会保留主机名和密码，更新前自动备份旧配置；不删除学习项目。依赖全部安装后，以后只更新配置时可以追加 `--skip-packages`。必须进入新的 Zsh 会话（上面的 `su -` 或重新登录）才能加载终端补全修复，Vim 配置在重新打开 Vim 后生效。仅下载入口或在已有终端继续输入命令，不会重新加载配置。
 
 ## 安装内容
 
 | 用途 | 工具与配置 |
 | --- | --- |
 | C/C++ | GCC/G++、Clang、CMake、Ninja、GDB、pkg-config、clangd、clang-format、clang-tidy；仓库提供 Valgrind 时一并安装 |
-| Python | Python 3、开发头文件、pip、venv、pipx；每个项目独立使用虚拟环境 |
-| 编辑与终端 | Vim、Zsh、tmux、Git、ripgrep、fzf、Universal Ctags、ShellCheck |
+| Python | Python 3、开发头文件、pip、venv、pipx、Flake8；每个项目独立使用虚拟环境 |
+| 编辑与终端 | Vim、ALE 代码诊断、Zsh、tmux、Git、ripgrep、fzf、Universal Ctags、ShellCheck |
 | Zsh 插件 | Ubuntu 软件源中的自动建议和语法高亮 |
 | 新文件模板 | 手动用 Vim 新建 C/C++、Python 文件时插入署名、时间和常用头文件/导入 |
 
-Python 环境不向系统 Python 全局安装第三方包。`pytest`、`ruff` 等工具可按项目需要安装；安装自检无需访问 PyPI。
+Python 工具和 Flake8 由 APT 管理，不使用 `sudo pip` 向系统 Python 安装第三方包。`pytest`、`ruff` 等工具可按项目需要在虚拟环境中安装；安装自检无需访问 PyPI。
 
 默认把目标账号的登录 Shell 设为 Zsh；使用 `--no-change-shell` 可保留原登录 Shell。
 
@@ -90,6 +90,10 @@ Python 环境不向系统 Python 全局安装第三方包。`pytest`、`ruff` �
 Vim 在所有文件类型的插入模式下自动配对 `()`、`[]`、`{}`、双引号、单引号和反引号，光标留在中间；再次输入紧邻光标的右括号或闭引号会跳过已有字符。在空配对中按退格会同时删除两边，在空括号中按 Enter 会展开并缩进。支持转义引号和 Python 三引号；`:set paste` 粘贴模式保留原文。需要关闭时，可在 `~/.vimrc.local` 加入 `let g:linux_env_auto_pairs = 0`。
 
 Vim 默认显示随光标移动的十字定位线：横向为当前行底部的一条细下划线，纵向为柔和的灰色背景列，保留代码语法颜色；深色、浅色背景均可使用。临时隐藏可执行 `:set nocursorline nocursorcolumn`。
+
+Vim 使用 Ubuntu 软件源中的 ALE 提供代码诊断。C/C++ 由 Clang / Clang++ 检查，Python 由 Flake8 检查；保存文件或退出插入模式后自动更新，检查不会运行你的程序或自动修改代码。左侧 `>>` 表示错误、`!!` 表示警告，问题范围以下划线标出；光标停在问题行时，底部显示具体信息。可用 `:ALELint` 手动检查、`:lopen` 打开问题列表、`]d` / `[d` 跳转到下一个 / 上一个问题。其他语言需另行安装对应检查器，并在 `~/.vimrc.local` 中配置 ALE。
+
+Python 默认仅检查 `E9,F63,F7,F82`（语法错误、部分易错表达式和未定义名字等），减少缩进宽度、行长之类风格提示。Flake8 使用 APT 版本做静态检查，不导入项目模块；项目依赖仍安装在各自的虚拟环境中。C/C++ 多文件项目按 ALE 的标准方式读取编译数据库；可用 `cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON` 生成 `build/compile_commands.json`，让检查器使用项目的头文件路径、宏和编译选项。诊断结果不能代替完整构建或运行测试。
 
 Zsh 用户名为柔和绿色（root 为珊瑚色），主机名为灰蓝色，路径为暖米色。保留灰色自动建议与 Tab 补全：`vim tes` 若有可用的完整文件建议，Enter 可直接打开该文件；没有灰色建议时，唯一前缀匹配也可直接打开，多个匹配则进入补全选择。
 
