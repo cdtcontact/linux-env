@@ -3,6 +3,9 @@ set nomore
 let s:case = json_decode(join(readfile(g:diagnostic_case_path), "\n"))
 let s:result = {}
 let g:ale_history_log_output = 1
+" ALE normally updates the window list in a later timer, after ALELintPost.
+" Use its supported test mode so the recorded list belongs to this lint pass.
+let g:ale_set_lists_synchronously = 1
 let g:diagnostic_lint_posts = 0
 augroup linux_env_diagnostic_test
     autocmd!
