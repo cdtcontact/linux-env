@@ -64,7 +64,8 @@ def test_diagnostics(root, extension, syntax_error=False):
         error_text = "invalid syntax" if syntax_error else "missing_symbol"
         require(any(item["lnum"] == error_line and error_text in item["text"]
                     and item["type"] == "E" for item in diagnostics),
-                case.name + " did not show the real checker error: " + json.dumps(diagnostics))
+                case.name + " " + phase + " did not show the real checker error: "
+                + json.dumps(state[phase]))
         require(any(sign["name"] == "ALEErrorSign" and sign["lnum"] == error_line
                     for sign in state[phase]["signs"]),
                 extension + " did not place an error marker")

@@ -2,6 +2,7 @@
 set nomore
 let s:case = json_decode(join(readfile(g:diagnostic_case_path), "\n"))
 let s:result = {}
+let g:ale_history_log_output = 1
 let g:diagnostic_lint_posts = 0
 augroup linux_env_diagnostic_test
     autocmd!
@@ -30,7 +31,8 @@ endfunction
 function! s:State() abort
     let l:signs = sign_getplaced(bufnr(''), {'group': '*'})[0].signs
     call filter(l:signs, 'v:val.name =~# "^ALE" && v:val.name !=# "ALEDummySign"')
-    return {'loclist': getloclist(0), 'signs': l:signs}
+    return {'loclist': getloclist(0), 'signs': l:signs,
+                \ 'ale_info': execute('ALEInfo'), 'filetype': &filetype}
 endfunction
 
 try
