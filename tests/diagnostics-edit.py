@@ -100,6 +100,13 @@ def main():
             require(editing["lines"][3].endswith(")") and empty(editing)
                     and editing["checks"] == clean["checks"],
                     "Typing on one row caused premature checks: " + json.dumps(editing))
+            # A manually requested result can arrive while this row is still
+            # incomplete. Its error must stay hidden until the cursor leaves.
+            keys(b"\x0c")
+            active = wait_for(lambda s: s["checks"] > editing["checks"] and not s["checking"],
+                              "The active-row checker result did not arrive")
+            on_row(active, 4)
+            require(empty(active), "A new result displayed errors on the current editing row")
             keys(b"\x1bOB")
             broken = wait_for(lambda s: any(item["type"] == "E" for item in s["loclist"])
                               and not s["checking"], "Leaving the incomplete row did not lint it")
@@ -134,7 +141,13 @@ def main():
                             and not s["checking"], "A fresh row change did not restore checking")
             on_row(final, 5)
             keys(b"\x1bOA\x05;")
-            require(empty(snapshot()), "Final INSERT correction did not clear the error")
+            corrected = snapshot()
+            require(empty(corrected), "Final INSERT correction did not clear the error")
+            keys(b"\x05\r")  # The native paired Enter mapping must also trigger a row check.
+            entered = wait_for(lambda s: s["checks"] > corrected["checks"] and not s["checking"],
+                               "A real INSERT Enter did not check the corrected buffer")
+            on_row(entered, 5)
+            require(empty(entered), "A real INSERT Enter restored an obsolete error")
             keys(b"\x1b:qall!\r")
             terminal.finish()
         require(source.read_text() == original, "Background checks rewrote the source on disk")

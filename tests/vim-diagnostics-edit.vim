@@ -19,5 +19,6 @@ endfunction
 " <Cmd> deliberately preserves INSERT, unlike <C-O>: or Escape-based probes.
 nnoremap <silent> <C-G> <Cmd>call <SID>Capture()<CR>
 inoremap <silent> <C-G> <Cmd>call <SID>Capture()<CR>
+inoremap <silent> <C-L> <Cmd>ALELint<CR>
 inoremap <C-E> <End>
 execute 'edit ' . fnameescape(s:case.source)
