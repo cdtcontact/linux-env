@@ -238,7 +238,10 @@ function! s:NewSourceHeader() abort
         if l:ext ==# 'c'
             call extend(l:lines, ['#include <stdio.h>', '#include <stdlib.h>', '#include <string.h>', ''])
         else
-            call extend(l:lines, ['#include <iostream>', '#include <string>', '#include <vector>', '#include <algorithm>', ''])
+            call extend(l:lines, ['#include <iostream>', '#include <cstdio>', '#include <cstdlib>',
+                        \ '#include <queue>', '#include <stack>', '#include <algorithm>',
+                        \ '#include <string>', '#include <map>', '#include <set>', '#include <vector>',
+                        \ 'using namespace std;', ''])
         endif
     endif
     call setline(1, l:lines)
