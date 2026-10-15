@@ -49,11 +49,15 @@ def main():
                 end = time.monotonic() + 5
                 while time.monotonic() < end:
                     terminal.pump()
-                    if record.exists():
+                    try:
                         state = json.loads(record.read_text())
-                        if state["serial"] > serial:
-                            serial = state["serial"]
-                            return state
+                    except FileNotFoundError:
+                        # Vim may unlink the previous capture before renaming
+                        # the replacement. Retry while that tiny gap is open.
+                        continue
+                    if state["serial"] > serial:
+                        serial = state["serial"]
+                        return state
                 raise AssertionError("Vim did not capture its diagnostic state")
 
             def wait_for(predicate, label):
